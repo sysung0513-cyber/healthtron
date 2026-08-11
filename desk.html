@@ -119,6 +119,7 @@
     .dash-grid .list-scroll{max-height:118px; overflow-y:auto;}
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -719,7 +720,11 @@ function removeCalciumPurchase(id, index){
 function renderCustomerList(){
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">고객관리 (${customers.length}명 · VIP ${customers.filter(c=>c.purchased).length}명)</h2>
-    ${isViewer() ? '' : '<button class="btn btn-primary" style="margin-bottom:16px;" onclick="openCustomerForm()">+ 신규 고객 등록</button>'}
+    ${isViewer() ? '' : `
+      <button class="btn btn-primary" style="margin-bottom:8px;" onclick="openCustomerForm()">+ 신규 고객 등록</button>
+      <button class="btn btn-ghost" style="margin-bottom:16px;" onclick="document.getElementById('excelImportFile').click()">📊 엑셀로 여러 명 한번에 등록</button>
+      <input type="file" id="excelImportFile" accept=".xlsx,.xls" style="display:none;" onchange="handleExcelImport(event)">
+    `}
     <div class="searchbar"><input type="text" id="custSearch" placeholder="이름 또는 전화번호 검색" oninput="renderCustomerItems()"></div>
     <div id="custItems"></div>
   `;
@@ -1163,6 +1168,83 @@ function renderTimelineBody(){
       </div>`).join('')}
     </div>`;
   }).join('');
+}
+
+/* ---------------- 엑셀로 고객 일괄 등록 ---------------- */
+function excelDateToStr(val){
+  if(val === undefined || val === null || val === '') return '';
+  if(val instanceof Date) return val.toISOString().slice(0,10);
+  if(typeof val === 'number'){
+    // 엑셀 날짜 시리얼 번호 처리
+    const d = XLSX.SSF.parse_date_code(val);
+    if(!d) return '';
+    return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+  }
+  const s = String(val).trim();
+  // 이미 YYYY-MM-DD 형태면 그대로, 아니면 Date 파싱 시도
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const parsed = new Date(s);
+  if(!isNaN(parsed.getTime())) return parsed.toISOString().slice(0,10);
+  return '';
+}
+async function handleExcelImport(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  e.target.value = ''; // 같은 파일 다시 선택 가능하도록 초기화
+
+  const reader = new FileReader();
+  reader.onload = async function(evt){
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true});
+      const sheetName = wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:''});
+
+      if(!rows.length){ alert('엑셀에 데이터가 없어요.'); return; }
+
+      const newCustomers = [];
+      const skipped = [];
+      rows.forEach((row, i)=>{
+        const name = String(row['이름']||'').trim();
+        const phone = String(row['전화번호']||'').trim();
+        if(!name || !phone){ skipped.push(i+2); return; } // 이름/전화번호 없으면 건너뜀 (엑셀 실제 행번호는 헤더+1)
+        const firstVisit = excelDateToStr(row['첫방문일']) || todayStr();
+        newCustomers.push({
+          id: uid(),
+          name, phone,
+          birth: excelDateToStr(row['생년월일']),
+          healthTag: String(row['건강관심사']||'').trim(),
+          threeManStart: excelDateToStr(row['3만볼트시작일']) || firstVisit,
+          fiveManDate: excelDateToStr(row['5만볼트가능일']),
+          referrer: String(row['소개자']||'').trim(),
+          referralBenefitUsed: false,
+          trialDisplay: false, trialStart: '',
+          purchased: String(row['구매여부']||'').trim().toUpperCase()==='TRUE',
+          purchaseDate: excelDateToStr(row['구매일']),
+          purchaseModel: String(row['구매모델']||'').trim(),
+          calciumDate: '', calciumPurchases: [],
+          memo: String(row['메모']||'').trim(),
+          firstVisit, visits: []
+        });
+      });
+
+      if(!newCustomers.length){ alert('등록할 수 있는 행이 없어요. 이름/전화번호가 채워졌는지 확인해주세요.'); return; }
+
+      const ok = confirm(`${newCustomers.length}명을 등록합니다.${skipped.length?` (이름/전화번호 없는 ${skipped.length}개 행은 건너뜀)`:''}\n계속할까요?`);
+      if(!ok) return;
+
+      showToast(`${newCustomers.length}명 등록 중...`);
+      for(const c of newCustomers){
+        customers.push(c);
+        await syncCustomer(c);
+      }
+      showToast(`✅ ${newCustomers.length}명 등록 완료!`);
+      renderCustomerList();
+    }catch(err){
+      alert('엑셀 파일을 읽는 중 문제가 생겼어요. 양식이 맞는지 확인해주세요.\n(' + err.message + ')');
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 /* ---------------- 백업 / 불러오기 (수동 보조용) ---------------- */
