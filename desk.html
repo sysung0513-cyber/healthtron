@@ -44,6 +44,9 @@
   .badge.coral{background:#FBEAE6; color:var(--coral);}
   .badge.amber{background:#FCF1DE; color:var(--amber);}
   .badge.vip{background:#F1E9F7; color:var(--vip);}
+  .badge-birthday{display:inline-block; background:linear-gradient(135deg,#FF6B93,#FF9A9E); color:#fff; font-size:14px; padding:5px 12px; border-radius:999px; font-weight:800; box-shadow:0 2px 6px rgba(255,107,147,0.5); letter-spacing:0.3px;}
+  .btn-mini{background:var(--amber); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;}
+  .btn-mini:active{opacity:0.8;}
   .empty{text-align:center; color:var(--muted); font-size:13px; padding:24px 0;}
   input[type=text], input[type=date], input[type=month], input[type=number], select, textarea{width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--line); font-size:15px; font-family:'Noto Sans KR',sans-serif; background:#fff;}
   input:focus, select:focus, textarea:focus{outline:none; border-color:var(--teal);}
@@ -187,6 +190,52 @@ function addDaysStr(dateStr, n){
   d.setDate(d.getDate()+n);
   return d.toISOString().slice(0,10);
 }
+// 매장 휴무일: 토·일요일 + 2026년 대한민국 법정공휴일(대체공휴일 포함)
+// ※ 매장 휴무 정책이 바뀌면 이 목록만 수정하면 됩니다.
+const HOLIDAYS_2026 = new Set([
+  '2026-01-01', // 신정
+  '2026-02-16','2026-02-17','2026-02-18', // 설날 연휴
+  '2026-03-02', // 삼일절 대체공휴일(3/1이 일요일)
+  '2026-05-05', // 어린이날
+  '2026-05-25', // 부처님오신날 대체공휴일(5/24가 일요일)
+  '2026-07-17', // 제헌절
+  '2026-08-15','2026-08-17', // 광복절 + 대체공휴일(8/15가 토요일)
+  '2026-09-24','2026-09-25','2026-09-26', // 추석 연휴
+  '2026-10-03','2026-10-05', // 개천절 + 대체공휴일(10/3이 토요일)
+  '2026-10-09', // 한글날
+  '2026-12-25', // 크리스마스
+]);
+function isBusinessDay(dateStr){
+  const day = new Date(dateStr+'T00:00:00').getDay(); // 0=일,6=토
+  if(day===0 || day===6) return false;
+  if(HOLIDAYS_2026.has(dateStr)) return false;
+  return true;
+}
+// 특정 날짜(asOfDate) 기준, 주말·공휴일은 건너뛰고 영업일만 따져서 며칠 연속 출석했는지 계산
+function currentStreak(c, asOfDate){
+  const visitDates = new Set(c.visits.map(v=>v.date));
+  let streak = 0;
+  let d = asOfDate;
+  let guard = 0;
+  while(guard++ < 3650){ // 무한루프 방지 안전장치
+    if(isBusinessDay(d)){
+      if(visitDates.has(d)){
+        streak++;
+        d = addDaysStr(d, -1);
+      } else {
+        break;
+      }
+    } else {
+      d = addDaysStr(d, -1); // 휴무일은 건너뛰고 계속 거슬러 올라감(끊김으로 취급 안 함)
+    }
+  }
+  return streak;
+}
+// 3일 연속(3,6,9...) 출석 달성일인지 여부 → 3만볼트 이용쿠폰 지급 대상
+function isCouponDay(c, asOfDate){
+  const s = currentStreak(c, asOfDate);
+  return s>0 && s%3===0;
+}
 function daysSince(dateStr){
   if(!dateStr) return null;
   const d1 = new Date(dateStr), d2 = new Date(todayStr());
@@ -239,7 +288,12 @@ function setStatus(ok, msg){
 async function fetchCustomersFromSheet(){
   const res = await fetch(SHEET_API_URL + '?action=list');
   const data = await res.json();
-  return (data.customers || []).map(c=>({...c, visits: c.visits || []}));
+  return (data.customers || []).map(c=>{
+    // 기존 calciumDate(단일 날짜)만 있고 calciumPurchases(누적 배열)가 없으면 1회 마이그레이션
+    let calciumPurchases = c.calciumPurchases || [];
+    if(!calciumPurchases.length && c.calciumDate) calciumPurchases = [c.calciumDate];
+    return {...c, visits: c.visits || [], calciumPurchases};
+  });
 }
 async function loadFromSheet(){
   if(!sheetConfigured()){
@@ -357,8 +411,9 @@ function renderHome(){
     .map(name=>({name, count:referralCount(name)}))
     .filter(x=>x.count>0).sort((a,b)=>b.count-a.count).slice(0,5);
 
-  const calciumToday = customers.filter(c=>c.calciumDate===today);
-  const calciumThisMonth = customers.filter(c=>c.calciumDate && c.calciumDate.startsWith(thisMonthPrefix));
+  const calciumToday = customers.filter(c=>(c.calciumPurchases||[]).includes(today));
+  const calciumThisMonthCustomers = customers.filter(c=>(c.calciumPurchases||[]).some(d=>d.startsWith(thisMonthPrefix)));
+  const calciumThisMonthCount = customers.reduce((sum,c)=>sum+(c.calciumPurchases||[]).filter(d=>d.startsWith(thisMonthPrefix)).length, 0);
 
   const vipTodayList = todayVisitors.filter(c=>c.purchased);
 
@@ -436,7 +491,7 @@ function renderHome(){
 
     <div class="card">
       <h3>💊 ⑨ 이 달 누적 칼슘 구입 고객수</h3>
-      <div class="row"><span class="sub">${thisMonthPrefix} 칼슘 구입 고객</span><span class="badge amber">${calciumThisMonth.length}명</span></div>
+      <div class="row"><span class="sub">${thisMonthPrefix} 칼슘 구입 고객</span><span class="badge amber">${calciumThisMonthCustomers.length}명 (총 ${calciumThisMonthCount}개)</span></div>
     </div>
 
     <div class="card" style="border:2px solid #F5C6CB; background:#FFF9FA;">
@@ -538,6 +593,25 @@ function doCheckin(id){
     const bd = daysUntilBirthday(c.birth, today);
     if(bd===0) showBirthdayAlert(c);
   }
+  if(isCouponDay(c, today)){
+    showCouponAlert(c, currentStreak(c, today));
+  }
+}
+function showCouponAlert(c, streak){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.innerHTML = `
+    <div class="modal" style="text-align:center; border-top:6px solid var(--amber);">
+      <div style="font-size:40px; margin:8px 0;">🎟️</div>
+      <h3 style="margin:0 0 8px;">${c.name}님 ${streak}일 연속 출석!</h3>
+      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.purchased?'<span class="badge vip">VIP</span>':''}</div>
+      <div style="background:#FFFDF7; border:1px solid var(--amber-light); border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
+        3만볼트 15분 이용쿠폰을 지급해주세요.
+      </div>
+      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">지급 완료</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
 }
 function showBirthdayAlert(c){
   const wrap = document.createElement('div');
@@ -575,7 +649,36 @@ function refocusScan(){ const el = document.getElementById('scanInput'); if(el) 
 function renderCheckinLog(){
   const box = document.getElementById('checkinLog');
   const todays = customers.flatMap(c=>c.visits.filter(v=>v.date===todayStr() && v.session===checkinSession).map(v=>({...v,cust:c})));
-  box.innerHTML = todays.length ? todays.map(v=>`<div class="row"><span class="name">${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''}</span><span class="sub">${v.time||''}</span></div>`).join('') : '<div class="empty">아직 체크한 고객이 없어요</div>';
+  box.innerHTML = todays.length ? todays.map(v=>{
+    const c = v.cust;
+    const total = (c.calciumPurchases||[]).length;
+    const boughtToday = (c.calciumPurchases||[]).filter(d=>d===todayStr()).length;
+    return `<div class="row">
+      <span class="name">${c.name} ${c.purchased?'<span class="badge vip">VIP</span>':''} ${total?`<span class="badge amber">💊 누적 ${total}개</span>`:''}</span>
+      <span style="display:flex; align-items:center; gap:8px;">
+        <span class="sub">${v.time||''}</span>
+        <button class="btn-mini" onclick="addCalciumPurchase('${c.id}')">💊 칼슘구매${boughtToday?` (오늘 ${boughtToday})`:''}</button>
+      </span>
+    </div>`;
+  }).join('') : '<div class="empty">아직 체크한 고객이 없어요</div>';
+}
+function addCalciumPurchase(id){
+  if(isViewer()){ showToast('열람 전용 모드에서는 등록할 수 없어요'); return; }
+  const c = customers.find(x=>x.id===id);
+  if(!c) return;
+  if(!c.calciumPurchases) c.calciumPurchases = [];
+  c.calciumPurchases.push(todayStr());
+  syncCustomer(c);
+  showToast(`${c.name}님 칼슘 구매 등록 (누적 ${c.calciumPurchases.length}개)`);
+  renderCheckinLog();
+}
+function removeCalciumPurchase(id, index){
+  if(isViewer()) return;
+  const c = customers.find(x=>x.id===id);
+  if(!c || !c.calciumPurchases) return;
+  c.calciumPurchases.splice(index, 1);
+  syncCustomer(c);
+  showToast('구매 내역을 삭제했어요');
 }
 
 /* ---------------- 고객관리 ---------------- */
@@ -604,7 +707,7 @@ function renderCustomerItems(){
 }
 
 function openCustomerForm(existing){
-  const c = existing || {id:uid(), name:'', phone:'', birth:'', healthTag:'', referrer:'', referralBenefitUsed:false, trialDisplay:false, trialStart:'', purchased:false, purchaseDate:'', purchaseModel:'', calciumDate:'', memo:'', firstVisit: todayStr(), visits:[], threeManStart: todayStr(), fiveManDate:''};
+  const c = existing || {id:uid(), name:'', phone:'', birth:'', healthTag:'', referrer:'', referralBenefitUsed:false, trialDisplay:false, trialStart:'', purchased:false, purchaseDate:'', purchaseModel:'', calciumDate:'', calciumPurchases:[], memo:'', firstVisit: todayStr(), visits:[], threeManStart: todayStr(), fiveManDate:''};
   const isNew = !existing;
   const wrap = document.createElement('div');
   wrap.className='modal-bg';
@@ -627,7 +730,13 @@ function openCustomerForm(existing){
       <div class="check-field"><input type="checkbox" id="f-purchased" ${c.purchased?'checked':''}><label for="f-purchased">치료기 구매 완료 (VIP 등록)</label></div>
       <label class="field"><span>구매일</span><input type="date" id="f-purchasedate" value="${c.purchaseDate}"></label>
       <label class="field"><span>구매 모델</span><select id="f-model"><option value="">선택 안 함</option>${MODELS.map(m=>`<option value="${m}" ${c.purchaseModel===m?'selected':''}>${m}</option>`).join('')}</select></label>
-      <label class="field"><span>칼슘 구매일 (구매한 날짜를 선택하세요)</span><input type="date" id="f-calcium" value="${c.calciumDate||''}"></label>
+      <label class="field"><span>💊 칼슘 구매 내역 (누적 ${(c.calciumPurchases||[]).length}개)</span></label>
+      <div class="card" style="margin-top:-6px; margin-bottom:14px;">
+        ${(c.calciumPurchases||[]).length ? (c.calciumPurchases||[]).map((d,i)=>({d,i})).sort((a,b)=>b.d.localeCompare(a.d)).map(x=>`
+          <div class="row"><span class="sub">${x.d}</span>${isNew?'':`<button class="btn-mini" style="background:#E8B4B8;" onclick="removeCalciumPurchase('${c.id}', ${x.i})">삭제</button>`}</div>
+        `).join('') : '<div class="empty">구매 내역이 없어요</div>'}
+        ${isNew?'<div class="sub" style="font-size:12px; color:var(--muted); margin-top:6px;">저장 후 상세보기에서 구매 내역을 추가할 수 있어요</div>':`<button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="addCalciumPurchase('${c.id}'); this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'));">+ 오늘 칼슘 구매 추가</button>`}
+      </div>
       <label class="field"><span>상담 메모</span><textarea id="f-memo" rows="3">${c.memo}</textarea></label>
       <button class="btn btn-primary" onclick="saveCustomer('${c.id}', ${isNew})">저장</button>
       ${!isNew?`<button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="if(confirm('정말 삭제할까요?')){deleteCustomer('${c.id}'); this.closest('.modal-bg').remove();}">고객 삭제</button>`:''}
@@ -657,12 +766,11 @@ function saveCustomer(id, isNew){
     purchased: document.getElementById('f-purchased').checked,
     purchaseDate: document.getElementById('f-purchasedate').value,
     purchaseModel: document.getElementById('f-model').value,
-    calciumDate: document.getElementById('f-calcium').value,
     memo: document.getElementById('f-memo').value,
   };
   let saved;
   if(isNew){
-    saved = {...data, firstVisit: todayStr(), visits:[]};
+    saved = {...data, firstVisit: todayStr(), visits:[], calciumPurchases:[]};
     customers.push(saved);
     showToast(`${name}님 등록 완료`);
   } else {
@@ -726,7 +834,7 @@ function openCustomerDetail(id){
           ${c.purchased?`<span class="badge vip">VIP · ${c.purchaseModel||''}</span>`:''}
           ${c.healthTag?`<span class="badge">${c.healthTag}</span>`:''}
           ${c.trialDisplay?`<span class="badge amber">전시품체험중</span>`:''}
-          ${c.calciumDate?`<span class="badge amber">칼슘구매(${c.calciumDate})</span>`:''}
+          ${(c.calciumPurchases||[]).length?`<span class="badge amber">💊 칼슘 누적 ${c.calciumPurchases.length}개</span>`:''}
         </div>
       </div>
       <div class="card">
@@ -736,6 +844,7 @@ function openCustomerDetail(id){
         <div class="row"><span class="sub">이 고객이 소개한 인원</span><span>${refCount}명</span></div>
         <div class="row"><span class="sub">최근 방문일</span><span>${lv||'-'}</span></div>
         <div class="row"><span class="sub">총 방문 횟수</span><span>${c.visits.length}회</span></div>
+        <div class="row"><span class="sub">현재 연속 출석</span><span>${currentStreak(c, todayStr())}일 ${isCouponDay(c, todayStr())?'<span class="badge amber">🎟️ 쿠폰대상</span>':''}</span></div>
       </div>
       <div class="card">
         <h3>📅 월별 주단위 출석일수</h3>
@@ -877,7 +986,8 @@ function renderStatsBody(){
   const purchasedInRange = customers.filter(c=>c.purchased && c.purchaseDate && c.purchaseDate.startsWith(prefix));
   const amCount = visitsInRange.filter(v=>v.session==='오전').length;
   const pmCount = visitsInRange.filter(v=>v.session==='오후').length;
-  const calciumInRange = customers.filter(c=>c.calciumDate && c.calciumDate.startsWith(prefix));
+  const calciumTxCount = customers.reduce((sum,c)=>sum+(c.calciumPurchases||[]).filter(d=>d.startsWith(prefix)).length, 0);
+  const calciumCustCount = customers.filter(c=>(c.calciumPurchases||[]).some(d=>d.startsWith(prefix))).length;
 
   const modelCount = {}; MODELS.forEach(m=>modelCount[m]=0);
   purchasedInRange.forEach(c=>{ if(c.purchaseModel) modelCount[c.purchaseModel] = (modelCount[c.purchaseModel]||0)+1; });
@@ -913,7 +1023,7 @@ function renderStatsBody(){
       ${MODELS.map(m=>`<div class="row"><span class="sub">${m}</span><span>${modelCount[m]}대</span></div>`).join('')}
     </div>
     <div class="card"><h3>💊 칼슘 구매 현황</h3>
-      <div class="row"><span class="sub">이 기간 칼슘 구매</span><span>${calciumInRange.length}명</span></div>
+      <div class="row"><span class="sub">이 기간 칼슘 구매</span><span>${calciumTxCount}개 (${calciumCustCount}명)</span></div>
     </div>
 
     <div class="card" style="border:2px solid var(--amber-light);">
@@ -976,6 +1086,10 @@ function renderTimelineBody(){
   const visits = customers.flatMap(c=>c.visits.filter(v=>v.date===timelineDate).map(v=>({...v, cust:c})));
   if(!visits.length){ box.innerHTML = '<div class="empty">이 날짜에 출석한 고객이 없어요</div>'; return; }
 
+  const couponToday = [...new Map(visits.map(v=>[v.cust.id, v.cust])).values()]
+    .filter(c=>isCouponDay(c, timelineDate))
+    .map(c=>({c, streak:currentStreak(c, timelineDate)}));
+
   const groups = {};
   visits.forEach(v=>{
     const label = timeSlotLabel(v.time);
@@ -984,12 +1098,19 @@ function renderTimelineBody(){
   });
   const labels = Object.keys(groups).sort((a,b)=>timeSlotSortKey(a)-timeSlotSortKey(b));
 
-  box.innerHTML = labels.map(label=>{
+  box.innerHTML = `
+    <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
+      <h3>🎟️ 오늘 3만볼트 쿠폰 대상자 (${couponToday.length}명)</h3>
+      ${couponToday.length ? couponToday.map(x=>`
+        <div class="row"><span class="name">${x.c.name} ${x.c.purchased?'<span class="badge vip">VIP</span>':''}</span><span class="sub">${x.streak}일 연속</span></div>
+      `).join('') : '<div class="empty">오늘 쿠폰 대상자가 없어요</div>'}
+    </div>
+  ` + labels.map(label=>{
     const list = groups[label].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
     return `<div class="slot-card">
       <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${list.length}명</span></div>
       ${list.map(v=>`<div class="slot-name" onclick="openCustomerDetail('${v.cust.id}')">
-        <span>${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''}</span>
+        <span>${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge amber">🎟️ 3일연속(${currentStreak(v.cust, v.date)}일)</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')}</span>
         <span class="t">${v.time||''}</span>
       </div>`).join('')}
     </div>`;
