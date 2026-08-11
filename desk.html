@@ -236,6 +236,20 @@ function isCouponDay(c, asOfDate){
   const s = currentStreak(c, asOfDate);
   return s>0 && s%3===0;
 }
+// 특정 날짜(asOfDate)까지의 누적 출석일수(서로 다른 날짜 기준)
+function totalAttendanceDays(c, asOfDate){
+  const dates = new Set((c.visits||[]).map(v=>v.date));
+  if(!asOfDate) return dates.size;
+  return [...dates].filter(d=>d<=asOfDate).length;
+}
+// 100일 단위(100,200,300...) 누적 출석 달성일인지 여부
+// ※ 보류 중: 다시 켜려면 아래 MILESTONE_FEATURE_ENABLED를 true로 바꾸면 됩니다.
+const MILESTONE_FEATURE_ENABLED = false;
+function isMilestoneDay(c, asOfDate){
+  if(!MILESTONE_FEATURE_ENABLED) return false;
+  const d = totalAttendanceDays(c, asOfDate);
+  return d>0 && d%100===0;
+}
 function daysSince(dateStr){
   if(!dateStr) return null;
   const d1 = new Date(dateStr), d2 = new Date(todayStr());
@@ -252,6 +266,7 @@ function shiftMonth(prefix, delta){
 }
 function addBusinessDays(startStr, totalDays){
   let d = new Date(startStr+'T00:00:00');
+  if(isNaN(d.getTime())) d = new Date(todayStr()+'T00:00:00'); // 잘못된/빈 날짜면 오늘 날짜로 대체
   let count = 0;
   while(true){
     const dow = d.getDay();
@@ -262,7 +277,7 @@ function addBusinessDays(startStr, totalDays){
   }
   return d.toISOString().slice(0,10);
 }
-function threeManEnd(c){ return addBusinessDays(c.threeManStart || c.firstVisit, 5); }
+function threeManEnd(c){ return addBusinessDays(c.threeManStart || c.firstVisit || todayStr(), 5); }
 function ddayBadge(endDate){
   const rem = -daysSince(endDate);
   if(rem>0) return {text:`D-${rem}`, cls:'badge'};
@@ -596,6 +611,25 @@ function doCheckin(id){
   if(isCouponDay(c, today)){
     showCouponAlert(c, currentStreak(c, today));
   }
+  if(isMilestoneDay(c, today)){
+    showMilestoneAlert(c, totalAttendanceDays(c, today));
+  }
+}
+function showMilestoneAlert(c, days){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.innerHTML = `
+    <div class="modal" style="text-align:center; border-top:6px solid #D4A017;">
+      <div style="font-size:40px; margin:8px 0;">🏆</div>
+      <h3 style="margin:0 0 8px;">${c.name}님 누적 출석 ${days}일 달성!</h3>
+      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.purchased?'<span class="badge vip">VIP</span>':''}</div>
+      <div style="background:#FFFBEB; border:1px solid #F0D896; border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
+        3만볼트 이용쿠폰을 지급해주세요.
+      </div>
+      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">지급 완료</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
 }
 function showCouponAlert(c, streak){
   const wrap = document.createElement('div');
@@ -845,6 +879,7 @@ function openCustomerDetail(id){
         <div class="row"><span class="sub">최근 방문일</span><span>${lv||'-'}</span></div>
         <div class="row"><span class="sub">총 방문 횟수</span><span>${c.visits.length}회</span></div>
         <div class="row"><span class="sub">현재 연속 출석</span><span>${currentStreak(c, todayStr())}일 ${isCouponDay(c, todayStr())?'<span class="badge amber">🎟️ 쿠폰대상</span>':''}</span></div>
+        <div class="row"><span class="sub">누적 출석일수</span><span>${totalAttendanceDays(c, todayStr())}일 ${isMilestoneDay(c, todayStr())?'<span class="badge" style="background:#FFF3CD; color:#8A6D00;">🏆 마일스톤</span>':''}</span></div>
       </div>
       <div class="card">
         <h3>📅 월별 주단위 출석일수</h3>
@@ -1073,6 +1108,15 @@ function timeSlotSortKey(label){
   const [hh,mm] = label.split('~')[0].trim().split(':').map(Number);
   return hh*60+mm;
 }
+function toggleVisitConfirmed(customerId, date, session){
+  const c = customers.find(x=>x.id===customerId);
+  if(!c) return;
+  const v = c.visits.find(x=>x.date===date && x.session===session);
+  if(!v) return;
+  v.confirmed = !v.confirmed;
+  syncCustomer(c);
+  renderTimelineBody();
+}
 function renderTimeline(){
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">시간대별 출석 (30분 단위)</h2>
@@ -1107,11 +1151,15 @@ function renderTimelineBody(){
     </div>
   ` + labels.map(label=>{
     const list = groups[label].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    const confirmedCount = list.filter(v=>v.confirmed).length;
     return `<div class="slot-card">
-      <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${list.length}명</span></div>
-      ${list.map(v=>`<div class="slot-name" onclick="openCustomerDetail('${v.cust.id}')">
-        <span>${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge amber">🎟️ 3일연속(${currentStreak(v.cust, v.date)}일)</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')}</span>
-        <span class="t">${v.time||''}</span>
+      <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${confirmedCount}/${list.length}명 확인</span></div>
+      ${list.map(v=>`<div class="slot-name" style="${v.confirmed?'opacity:0.55;':''}">
+        <span onclick="openCustomerDetail('${v.cust.id}')" style="cursor:pointer; ${v.confirmed?'text-decoration:line-through;':''}">${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge amber">🎟️ 3일연속(${currentStreak(v.cust, v.date)}일)</span>`:''} ${isMilestoneDay(v.cust, v.date)?`<span class="badge" style="background:#FFF3CD; color:#8A6D00;">🏆 누적${totalAttendanceDays(v.cust, v.date)}일</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')}</span>
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span class="t">${v.time||''}</span>
+          <button class="btn-mini" style="background:${v.confirmed?'#7BAE7F':'#ccc'};" onclick="event.stopPropagation(); toggleVisitConfirmed('${v.cust.id}','${v.date}','${v.session}')">${v.confirmed?'✅ 확인됨':'⬜ 확인'}</button>
+        </span>
       </div>`).join('')}
     </div>`;
   }).join('');

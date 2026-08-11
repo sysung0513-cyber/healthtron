@@ -45,6 +45,8 @@
   .badge.amber{background:#FCF1DE; color:var(--amber);}
   .badge.vip{background:#F1E9F7; color:var(--vip);}
   .badge-birthday{display:inline-block; background:linear-gradient(135deg,#FF6B93,#FF9A9E); color:#fff; font-size:14px; padding:5px 12px; border-radius:999px; font-weight:800; box-shadow:0 2px 6px rgba(255,107,147,0.5); letter-spacing:0.3px;}
+  .btn-mini{background:var(--amber); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;}
+  .btn-mini:active{opacity:0.8;}
   .empty{text-align:center; color:var(--muted); font-size:13px; padding:24px 0;}
   input[type=text], input[type=date], input[type=month], input[type=number], select, textarea{width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid var(--line); font-size:15px; font-family:'Noto Sans KR',sans-serif; background:#fff;}
   input:focus, select:focus, textarea:focus{outline:none; border-color:var(--teal);}
@@ -235,6 +237,20 @@ function isCouponDay(c, asOfDate){
   const s = currentStreak(c, asOfDate);
   return s>0 && s%3===0;
 }
+// 특정 날짜(asOfDate)까지의 누적 출석일수(서로 다른 날짜 기준)
+function totalAttendanceDays(c, asOfDate){
+  const dates = new Set((c.visits||[]).map(v=>v.date));
+  if(!asOfDate) return dates.size;
+  return [...dates].filter(d=>d<=asOfDate).length;
+}
+// 100일 단위(100,200,300...) 누적 출석 달성일인지 여부
+// ※ 보류 중: 다시 켜려면 아래 MILESTONE_FEATURE_ENABLED를 true로 바꾸면 됩니다.
+const MILESTONE_FEATURE_ENABLED = false;
+function isMilestoneDay(c, asOfDate){
+  if(!MILESTONE_FEATURE_ENABLED) return false;
+  const d = totalAttendanceDays(c, asOfDate);
+  return d>0 && d%100===0;
+}
 function lastVisitDate(c){
   if(!c.visits || !c.visits.length) return c.firstVisit || null;
   return c.visits.reduce((max,v)=> v.date>max ? v.date : max, c.visits[0].date);
@@ -255,6 +271,7 @@ function shiftMonth(prefix, delta){
 }
 function addBusinessDays(startStr, totalDays){
   let d = new Date(startStr+'T00:00:00');
+  if(isNaN(d.getTime())) d = new Date(todayStr()+'T00:00:00'); // 잘못된/빈 날짜면 오늘 날짜로 대체
   let count = 0;
   while(true){
     const dow = d.getDay();
@@ -265,7 +282,7 @@ function addBusinessDays(startStr, totalDays){
   }
   return d.toISOString().slice(0,10);
 }
-function threeManEnd(c){ return addBusinessDays(c.threeManStart || c.firstVisit, 5); }
+function threeManEnd(c){ return addBusinessDays(c.threeManStart || c.firstVisit || todayStr(), 5); }
 function ddayBadge(endDate){
   const rem = -daysSince(endDate);
   if(rem>0) return {text:`D-${rem}`, cls:'badge'};
@@ -283,6 +300,16 @@ function showToast(msg){
 function sheetConfigured(){
   return SHEET_API_URL && SHEET_API_URL.startsWith('http');
 }
+async function syncCustomer(c){
+  if(!sheetConfigured()) return;
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'upsert', customer:c})
+    });
+  }catch(err){ showToast('⚠️ 구글시트 저장 실패 (인터넷 확인)'); }
+}
 function showCouponAlert(c, streak){
   const wrap = document.createElement('div');
   wrap.className = 'modal-bg';
@@ -299,18 +326,45 @@ function showCouponAlert(c, streak){
   `;
   document.body.appendChild(wrap);
 }
+function showMilestoneAlert(c, days){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.innerHTML = `
+    <div class="modal" style="text-align:center; border-top:6px solid #D4A017;">
+      <div style="font-size:40px; margin:8px 0;">🏆</div>
+      <h3 style="margin:0 0 8px;">${c.name}님 누적 출석 ${days}일 달성!</h3>
+      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.purchased?'<span class="badge vip">VIP</span>':''}</div>
+      <div style="background:#FFFBEB; border:1px solid #F0D896; border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
+        3만볼트 이용쿠폰을 지급해주세요.
+      </div>
+      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">지급 완료</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+}
 // 오늘 새로 3일연속(3,6,9...) 쿠폰 대상이 된 고객을 찾아 팝업 알림
 // (같은 고객·같은 날짜에는 한 번만 뜨도록 window._seenCouponAlerts로 기록)
 window._seenCouponAlerts = window._seenCouponAlerts || new Set();
+window._seenMilestoneAlerts = window._seenMilestoneAlerts || new Set();
 function checkCouponAlerts(){
   const today = todayStr();
   customers.forEach(c=>{
     const checkedInToday = c.visits.some(v=>v.date===today);
-    if(!checkedInToday || !isCouponDay(c, today)) return;
-    const key = c.id + '_' + today;
-    if(window._seenCouponAlerts.has(key)) return;
-    window._seenCouponAlerts.add(key);
-    showCouponAlert(c, currentStreak(c, today));
+    if(!checkedInToday) return;
+    if(isCouponDay(c, today)){
+      const key = c.id + '_' + today;
+      if(!window._seenCouponAlerts.has(key)){
+        window._seenCouponAlerts.add(key);
+        showCouponAlert(c, currentStreak(c, today));
+      }
+    }
+    if(isMilestoneDay(c, today)){
+      const mkey = c.id + '_milestone_' + today;
+      if(!window._seenMilestoneAlerts.has(mkey)){
+        window._seenMilestoneAlerts.add(mkey);
+        showMilestoneAlert(c, totalAttendanceDays(c, today));
+      }
+    }
   });
 }
 function setStatus(ok, msg){
@@ -771,6 +825,7 @@ function openCustomerDetail(id){
         <div class="row"><span class="sub">최근 방문일</span><span>${lv||'-'}</span></div>
         <div class="row"><span class="sub">총 방문 횟수</span><span>${c.visits.length}회</span></div>
         <div class="row"><span class="sub">현재 연속 출석</span><span>${currentStreak(c, todayStr())}일 ${isCouponDay(c, todayStr())?'<span class="badge amber">🎟️ 쿠폰대상</span>':''}</span></div>
+        <div class="row"><span class="sub">누적 출석일수</span><span>${totalAttendanceDays(c, todayStr())}일 ${isMilestoneDay(c, todayStr())?'<span class="badge" style="background:#FFF3CD; color:#8A6D00;">🏆 마일스톤</span>':''}</span></div>
       </div>
       <div class="card">
         <h3>📅 월별 주단위 출석일수</h3>
@@ -1000,6 +1055,15 @@ function renderTimeline(){
   `;
   renderTimelineBody();
 }
+function toggleVisitConfirmed(customerId, date, session){
+  const c = customers.find(x=>x.id===customerId);
+  if(!c) return;
+  const v = c.visits.find(x=>x.date===date && x.session===session);
+  if(!v) return;
+  v.confirmed = !v.confirmed;
+  syncCustomer(c);
+  renderTimelineBody();
+}
 function renderTimelineBody(){
   const box = document.getElementById('timelineBody');
   const visits = customers.flatMap(c=>c.visits.filter(v=>v.date===timelineDate).map(v=>({...v, cust:c})));
@@ -1027,11 +1091,15 @@ function renderTimelineBody(){
     </div>
   ` + labels.map(label=>{
     const list = groups[label].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    const confirmedCount = list.filter(v=>v.confirmed).length;
     return `<div class="slot-card">
-      <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${list.length}명</span></div>
-      ${list.map(v=>`<div class="slot-name" onclick="openCustomerDetail('${v.cust.id}')">
-        <span>${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge amber">🎟️ 3일연속(${currentStreak(v.cust, v.date)}일)</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')}</span>
-        <span class="t">${v.time||''}</span>
+      <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${confirmedCount}/${list.length}명 확인</span></div>
+      ${list.map(v=>`<div class="slot-name" style="${v.confirmed?'opacity:0.55;':''}">
+        <span onclick="openCustomerDetail('${v.cust.id}')" style="cursor:pointer; ${v.confirmed?'text-decoration:line-through;':''}">${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge amber">🎟️ 3일연속(${currentStreak(v.cust, v.date)}일)</span>`:''} ${isMilestoneDay(v.cust, v.date)?`<span class="badge" style="background:#FFF3CD; color:#8A6D00;">🏆 누적${totalAttendanceDays(v.cust, v.date)}일</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')}</span>
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span class="t">${v.time||''}</span>
+          <button class="btn-mini" style="background:${v.confirmed?'#7BAE7F':'#ccc'};" onclick="event.stopPropagation(); toggleVisitConfirmed('${v.cust.id}','${v.date}','${v.session}')">${v.confirmed?'✅ 확인됨':'⬜ 확인'}</button>
+        </span>
       </div>`).join('')}
     </div>`;
   }).join('');
