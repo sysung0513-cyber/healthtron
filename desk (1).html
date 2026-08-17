@@ -91,43 +91,42 @@
   .slot-name:active{background:var(--sage);}
   .slot-name .t{font-size:14px; color:var(--muted); font-weight:400;}
 
-  /* ---- 10인치 태블릿(강사용) 전용: 홈 화면을 스크롤 없이 한 화면에 ---- */
+  /* ---- 24인치 모니터(안내데스크) 전용: 홈 화면을 스크롤 없이 한 화면에 ---- */
   .dash-grid{display:block;}
   .list-scroll{max-height:none; overflow:visible;}
-  @media (min-width:700px){
-    body{padding-bottom:60px;}
-    header{padding:9px 18px;}
-    .stamp{width:36px; height:36px; font-size:16px;}
-    header h1{font-size:16px;}
-    header .sub{font-size:11px;}
-    .status-banner{font-size:11px; padding:4px 12px;}
-    main{max-width:1300px; padding:12px 16px 0;}
-    h2.section-title{font-size:16px; margin-bottom:8px;}
-    .tabbtn{padding:7px 4px 6px; font-size:10.5px;}
-    .tabbtn .ic{font-size:17px;}
+  @media (min-width:1200px){
+    body{padding-bottom:58px;}
+    header{padding:8px 22px;}
+    .stamp{width:34px; height:34px; font-size:15px;}
+    header h1{font-size:15px;}
+    header .sub{font-size:10.5px; margin-top:0;}
+    .status-banner{font-size:10.5px; padding:3px 12px;}
+    main{max-width:1760px; padding:12px 22px 0;}
+    h2.section-title{font-size:15px; margin-bottom:8px;}
+    .tabbar{}
+    .tabbtn{padding:6px 4px 5px; font-size:10px; gap:1px;}
+    .tabbtn .ic{font-size:15px;}
 
-    .dash-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:9px; align-items:start;}
-    .dash-grid .card{margin-bottom:0; padding:11px 13px;}
-    .dash-grid .card h3{font-size:13px; margin-bottom:6px;}
-    .dash-grid .row{padding:5px 0; font-size:12.5px;}
-    .dash-grid .grid4{gap:6px; margin-bottom:0;}
-    .dash-grid .stat{padding:9px 6px;}
-    .dash-grid .stat .n{font-size:19px;}
-    .dash-grid .stat .l{font-size:10px;}
-    .dash-grid .empty{font-size:12px; padding:12px 0;}
-    .dash-grid .list-scroll{max-height:150px; overflow-y:auto;}
-  }
-  @media (min-width:1000px){
-    .dash-grid{grid-template-columns:repeat(3,1fr);}
+    .dash-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; align-items:start;}
+    .dash-grid .card{margin-bottom:0; padding:10px 12px;}
+    .dash-grid .card h3{font-size:11.5px; margin-bottom:5px;}
+    .dash-grid .row{padding:4px 0; font-size:11.5px;}
+    .dash-grid .grid4{gap:5px; margin-bottom:0;}
+    .dash-grid .stat{padding:8px 6px;}
+    .dash-grid .stat .n{font-size:17px;}
+    .dash-grid .stat .l{font-size:9px;}
+    .dash-grid .empty{font-size:11px; padding:10px 0;}
+    .dash-grid .list-scroll{max-height:118px; overflow-y:auto;}
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
 <div class="status-banner status-warn" id="statusBanner">⏳ 구글시트 연결 확인 중...</div>
 <header>
   <div class="stamp">출</div>
-  <div><h1>헬스트론 출석관리</h1><div class="sub">강의용</div></div>
+  <div><h1>헬스트론 출석관리</h1><div class="sub">안내데스크</div></div>
   <div class="hbtns">
     <button class="hbtn" onclick="manualRefresh()">🔄 새로고침</button>
     <button class="hbtn" onclick="exportData()">⬇ 백업</button>
@@ -154,7 +153,7 @@
    0. 구글시트 연동 설정 — 배포한 웹앱 URL을 여기에 붙여넣으세요
    ========================================================= */
 const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbym1g8ZfBYe9PitQpWaRnRePm5_PEf_l8juk4cMekcwuELZ5AEyTOEG0qjR8r9X0g2I/exec";
-const APP_MODE = "viewer"; // "desk"(안내데스크, 전체 기능) 또는 "viewer"(강사용, 열람 전용)
+const APP_MODE = "desk"; // "desk"(안내데스크, 전체 기능) 또는 "viewer"(강사용, 열람 전용)
 function isViewer(){ return APP_MODE === "viewer"; }
 
 let customers = [];
@@ -247,6 +246,7 @@ function daysDiff(fromStr, toStr){
   const b = new Date(toStr+'T00:00:00');
   return Math.round((b - a) / 86400000);
 }
+// birth(YYYY-MM-DD)의 올해(또는 내년) 생일까지 남은 일수
 function daysUntilBirthday(birthStr, todayStr_){
   if(!birthStr) return null;
   const mmdd = birthStr.slice(5,10); // MM-DD
@@ -321,10 +321,6 @@ function isMilestoneDay(c, asOfDate){
   const d = totalAttendanceDays(c, asOfDate);
   return d>0 && d%100===0;
 }
-function lastVisitDate(c){
-  if(!c.visits || !c.visits.length) return c.firstVisit || null;
-  return c.visits.reduce((max,v)=> v.date>max ? v.date : max, c.visits[0].date);
-}
 function daysSince(dateStr){
   if(!dateStr) return null;
   const d1 = new Date(dateStr), d2 = new Date(todayStr());
@@ -332,6 +328,11 @@ function daysSince(dateStr){
 }
 function lastVisit(c){ if(!c.visits.length) return null; return c.visits.map(v=>v.date).sort().slice(-1)[0]; }
 function referralCount(name){ return customers.filter(c=>c.referrer && c.referrer.trim()===name.trim()).length; }
+// 누적 소개 건수를 3,5,7,9... 홀수 단계 중 달성한 가장 높은 단계로 변환 (2 이하는 null)
+function referralTier(total){
+  if(total<3) return null;
+  return total % 2===1 ? total : total-1;
+}
 function shiftMonth(prefix, delta){
   let [y,m] = prefix.split('-').map(Number);
   m += delta;
@@ -370,73 +371,6 @@ function showToast(msg){
 function sheetConfigured(){
   return SHEET_API_URL && SHEET_API_URL.startsWith('http');
 }
-async function syncCustomer(c){
-  if(!sheetConfigured()) return;
-  try{
-    await fetch(SHEET_API_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({action:'upsert', customer:c})
-    });
-  }catch(err){ showToast('⚠️ 구글시트 저장 실패 (인터넷 확인)'); }
-}
-function showCouponAlert(c, streak){
-  const wrap = document.createElement('div');
-  wrap.className = 'modal-bg';
-  wrap.innerHTML = `
-    <div class="modal" style="text-align:center; border-top:6px solid var(--amber);">
-      <div style="font-size:40px; margin:8px 0;">🎟️</div>
-      <h3 style="margin:0 0 8px;">${c.name}님 ${streak}일 연속 출석!</h3>
-      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.purchased?'<span class="badge vip">VIP</span>':''}</div>
-      <div style="background:#FFFDF7; border:1px solid var(--amber-light); border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
-        3만볼트 15분 이용쿠폰을 지급해주세요.
-      </div>
-      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">지급 완료</button>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-}
-function showMilestoneAlert(c, days){
-  const wrap = document.createElement('div');
-  wrap.className = 'modal-bg';
-  wrap.innerHTML = `
-    <div class="modal" style="text-align:center; border-top:6px solid #D4A017;">
-      <div style="font-size:40px; margin:8px 0;">🏆</div>
-      <h3 style="margin:0 0 8px;">${c.name}님 누적 출석 ${days}일 달성!</h3>
-      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.purchased?'<span class="badge vip">VIP</span>':''}</div>
-      <div style="background:#FFFBEB; border:1px solid #F0D896; border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
-        3만볼트 이용쿠폰을 지급해주세요.
-      </div>
-      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">지급 완료</button>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-}
-// 오늘 새로 3일연속(3,6,9...) 쿠폰 대상이 된 고객을 찾아 팝업 알림
-// (같은 고객·같은 날짜에는 한 번만 뜨도록 window._seenCouponAlerts로 기록)
-window._seenCouponAlerts = window._seenCouponAlerts || new Set();
-window._seenMilestoneAlerts = window._seenMilestoneAlerts || new Set();
-function checkCouponAlerts(){
-  const today = todayStr();
-  customers.forEach(c=>{
-    const checkedInToday = c.visits.some(v=>v.date===today);
-    if(!checkedInToday) return;
-    if(isCouponDay(c, today)){
-      const key = c.id + '_' + today;
-      if(!window._seenCouponAlerts.has(key)){
-        window._seenCouponAlerts.add(key);
-        showCouponAlert(c, currentStreak(c, today));
-      }
-    }
-    if(isMilestoneDay(c, today)){
-      const mkey = c.id + '_milestone_' + today;
-      if(!window._seenMilestoneAlerts.has(mkey)){
-        window._seenMilestoneAlerts.add(mkey);
-        showMilestoneAlert(c, totalAttendanceDays(c, today));
-      }
-    }
-  });
-}
 function setStatus(ok, msg){
   const el = document.getElementById('statusBanner');
   el.className = 'status-banner ' + (ok?'status-ok':'status-warn');
@@ -446,6 +380,7 @@ async function fetchCustomersFromSheet(){
   const res = await fetch(SHEET_API_URL + '?action=list');
   const data = await res.json();
   return (data.customers || []).map(c=>{
+    // 기존 calciumDate(단일 날짜)만 있고 calciumPurchases(누적 배열)가 없으면 1회 마이그레이션
     let calciumPurchases = c.calciumPurchases || [];
     if(!calciumPurchases.length && c.calciumDate) calciumPurchases = [c.calciumDate];
     return {...c, visits: c.visits || [], calciumPurchases};
@@ -465,7 +400,6 @@ async function loadFromSheet(){
   }
   render();
   startAutoRefresh();
-  checkCouponAlerts();
   checkElectrodeCouponAlerts();
 }
 function startAutoRefresh(){
@@ -485,7 +419,6 @@ async function silentRefresh(){
     customers = await fetchCustomersFromSheet();
   }catch(err){ return; } // 실패하면 다음 주기에 조용히 재시도
   render();
-  checkCouponAlerts();
   checkElectrodeCouponAlerts();
   Object.keys(preserve).forEach(id=>{
     const el = document.getElementById(id);
@@ -543,6 +476,7 @@ function render(){
 function renderHome(){
   const today = todayStr();
   const thisMonthPrefix = today.slice(0,7);
+  const lastMonthPrefix = shiftMonth(thisMonthPrefix, -1);
 
   const breakdown = visitors => ({
     total: visitors.length,
@@ -562,6 +496,10 @@ function renderHome(){
   const thisMonthRegToday = thisMonthReg.filter(c=>c.visits.some(v=>v.date===today)).length;
   const thisMonthRate = thisMonthReg.length ? Math.round(thisMonthRegToday/thisMonthReg.length*1000)/10 : null;
 
+  const lastMonthReg = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(lastMonthPrefix));
+  const lastMonthRegToday = lastMonthReg.filter(c=>c.visits.some(v=>v.date===today)).length;
+  const lastMonthRate = lastMonthReg.length ? Math.round(lastMonthRegToday/lastMonthReg.length*1000)/10 : null;
+
   // 소개왕 TOP5: 이번 달에 새로 등록한 고객들의 소개자만 집계 (매달 새로 시상 가능)
   const thisMonthNewCustomers = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(thisMonthPrefix));
   const referralCountThisMonth = name => thisMonthNewCustomers.filter(c=>c.referrer && c.referrer.trim()===name.trim()).length;
@@ -569,10 +507,16 @@ function renderHome(){
     .map(name=>({name, count:referralCountThisMonth(name), total:referralCount(name)}))
     .filter(x=>x.count>0).sort((a,b)=>b.count-a.count).slice(0,5);
 
+  // 누적 소개 건수가 홀수(3,5,7,9...)에 도달한 시상 대상자 (매번 반복 시상)
   const allReferrerNames = [...new Set(customers.map(c=>c.referrer).filter(Boolean).map(r=>r.trim()))];
   const referrerTotals = allReferrerNames.map(name=>({name, total:referralCount(name)})).filter(x=>x.total>0);
-  const milestone3 = referrerTotals.filter(x=>x.total>=3 && x.total<5).sort((a,b)=>b.total-a.total);
-  const milestone5 = referrerTotals.filter(x=>x.total>=5).sort((a,b)=>b.total-a.total);
+  const oddMilestoneReferrers = referrerTotals.filter(x=>x.total>=3 && x.total%2===1).sort((a,b)=>b.total-a.total);
+
+  const calciumToday = customers.filter(c=>(c.calciumPurchases||[]).includes(today));
+  const calciumThisMonthCustomers = customers.filter(c=>(c.calciumPurchases||[]).some(d=>d.startsWith(thisMonthPrefix)));
+  const calciumThisMonthCount = customers.reduce((sum,c)=>sum+(c.calciumPurchases||[]).filter(d=>d.startsWith(thisMonthPrefix)).length, 0);
+
+  const vipTodayList = todayVisitors.filter(c=>c.purchased);
 
   // 오늘 방문자 중 7일 이상 결석 후 복귀한 고객
   const returningToday = todayVisitors.map(c=>{
@@ -582,6 +526,13 @@ function renderHome(){
     const gap = daysDiff(lastPrior, today);
     return gap>=7 ? {c, lastPrior, gap} : null;
   }).filter(Boolean).sort((a,b)=>b.gap-a.gap);
+
+  // 생일 임박 VIP (14일 이내)
+  const BIRTHDAY_WINDOW = 14;
+  const upcomingBirthdayVips = customers.filter(c=>c.purchased && c.birth).map(c=>{
+    const d = daysUntilBirthday(c.birth, today);
+    return {c, d};
+  }).filter(x=>x.d!==null && x.d<=BIRTHDAY_WINDOW).sort((a,b)=>a.d-b.d);
 
   const statBlock = (title, s) => `
     <div class="card">
@@ -608,11 +559,57 @@ function renderHome(){
     </div>
 
     <div class="card">
-      <h3>🏅 ⑥ 소개왕 TOP5</h3>
+      <h3>⑤ 지난달 등록 후 오늘 방문</h3>
+      <div class="row"><span class="sub">지난달 등록인원</span><span>${lastMonthReg.length}명</span></div>
+      <div class="row"><span class="sub">오늘 방문</span><span>${lastMonthRegToday}명</span></div>
+      <div class="row"><span class="sub">비율</span><span class="badge amber">${lastMonthRate!==null?lastMonthRate+'%':'-'}</span></div>
+    </div>
+
+    <div class="card">
+      <h3>🏅 ⑥ 이달의 소개왕 TOP5 (${thisMonthPrefix})</h3>
       <div class="list-scroll">
       ${topReferrers.length ? topReferrers.map((x,i)=>`
         <div class="row"><div class="name">${i+1}. ${x.name}</div><span class="badge amber">이달 ${x.count}명 · 누적 ${x.total}명</span></div>
       `).join('') : '<div class="empty">아직 소개 데이터가 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
+      <h3>🎁 소개 시상 대상자 (누적 3,5,7,9...명 달성)</h3>
+      <div class="list-scroll">
+      ${oddMilestoneReferrers.length ? oddMilestoneReferrers.map(x=>`
+        <div class="row"><span class="name">${x.name}</span><span class="badge amber">누적 ${x.total}명 달성</span></div>
+      `).join('') : '<div class="empty">해당자가 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>👑 ⑦ 출석한 VIP (${vipTodayList.length}명)</h3>
+      <div class="list-scroll">
+      ${vipTodayList.length ? vipTodayList.map(c=>`
+        <div class="row"><span class="name">${c.name}</span><span class="sub">${c.purchaseModel||''}</span></div>
+      `).join('') : '<div class="empty">오늘 방문한 VIP가 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>💊 ⑧ 오늘 칼슘 구입 고객 (${calciumToday.length}명)</h3>
+      <div class="list-scroll">
+      ${calciumToday.length ? calciumToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">오늘 칼슘 구입 고객이 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>💊 ⑨ 이 달 누적 칼슘 구입 고객수</h3>
+      <div class="row"><span class="sub">${thisMonthPrefix} 칼슘 구입 고객</span><span class="badge amber">${calciumThisMonthCustomers.length}명 (총 ${calciumThisMonthCount}개)</span></div>
+    </div>
+
+    <div class="card" style="border:2px solid #F5C6CB; background:#FFF9FA;">
+      <h3>🎂 생일 임박 VIP (${BIRTHDAY_WINDOW}일 이내, ${upcomingBirthdayVips.length}명)</h3>
+      <div class="list-scroll">
+      ${upcomingBirthdayVips.length ? upcomingBirthdayVips.map(x=>`
+        <div class="row"><span class="name">${x.c.name}</span><span class="sub">${x.d===0?'오늘 생일 🎉':`D-${x.d} (${x.c.birth.slice(5)})`}</span></div>
+      `).join('') : '<div class="empty">14일 이내 생일인 VIP가 없어요</div>'}
       </div>
     </div>
 
@@ -706,6 +703,44 @@ function doCheckin(id){
     const bd = daysUntilBirthday(c.birth, today);
     if(bd===0) showBirthdayAlert(c);
   }
+  if(isCouponDay(c, today)){
+    showCouponAlert(c, currentStreak(c, today));
+  }
+  if(isMilestoneDay(c, today)){
+    showMilestoneAlert(c, totalAttendanceDays(c, today));
+  }
+}
+function showMilestoneAlert(c, days){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.innerHTML = `
+    <div class="modal" style="text-align:center; border-top:6px solid #D4A017;">
+      <div style="font-size:40px; margin:8px 0;">🏆</div>
+      <h3 style="margin:0 0 8px;">${c.name}님 누적 출석 ${days}일 달성!</h3>
+      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.purchased?'<span class="badge vip">VIP</span>':''}</div>
+      <div style="background:#FFFBEB; border:1px solid #F0D896; border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
+        3만볼트 이용쿠폰을 지급해주세요.
+      </div>
+      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">지급 완료</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+}
+function showCouponAlert(c, streak){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.innerHTML = `
+    <div class="modal" style="text-align:center; border-top:6px solid var(--amber);">
+      <div style="font-size:40px; margin:8px 0;">🎟️</div>
+      <h3 style="margin:0 0 8px;">${c.name}님 ${streak}일 연속 출석!</h3>
+      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.purchased?'<span class="badge vip">VIP</span>':''}</div>
+      <div style="background:#FFFDF7; border:1px solid var(--amber-light); border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
+        3만볼트 15분 이용쿠폰을 지급해주세요.
+      </div>
+      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">지급 완료</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
 }
 function showBirthdayAlert(c){
   const wrap = document.createElement('div');
@@ -743,14 +778,47 @@ function refocusScan(){ const el = document.getElementById('scanInput'); if(el) 
 function renderCheckinLog(){
   const box = document.getElementById('checkinLog');
   const todays = customers.flatMap(c=>c.visits.filter(v=>v.date===todayStr() && v.session===checkinSession).map(v=>({...v,cust:c})));
-  box.innerHTML = todays.length ? todays.map(v=>`<div class="row"><span class="name">${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''}</span><span class="sub">${v.time||''}</span></div>`).join('') : '<div class="empty">아직 체크한 고객이 없어요</div>';
+  box.innerHTML = todays.length ? todays.map(v=>{
+    const c = v.cust;
+    const total = (c.calciumPurchases||[]).length;
+    const boughtToday = (c.calciumPurchases||[]).filter(d=>d===todayStr()).length;
+    return `<div class="row">
+      <span class="name">${c.name} ${c.purchased?'<span class="badge vip">VIP</span>':''} ${total?`<span class="badge amber">💊 누적 ${total}개</span>`:''}</span>
+      <span style="display:flex; align-items:center; gap:8px;">
+        <span class="sub">${v.time||''}</span>
+        <button class="btn-mini" onclick="addCalciumPurchase('${c.id}')">💊 칼슘구매${boughtToday?` (오늘 ${boughtToday})`:''}</button>
+      </span>
+    </div>`;
+  }).join('') : '<div class="empty">아직 체크한 고객이 없어요</div>';
+}
+function addCalciumPurchase(id){
+  if(isViewer()){ showToast('열람 전용 모드에서는 등록할 수 없어요'); return; }
+  const c = customers.find(x=>x.id===id);
+  if(!c) return;
+  if(!c.calciumPurchases) c.calciumPurchases = [];
+  c.calciumPurchases.push(todayStr());
+  syncCustomer(c);
+  showToast(`${c.name}님 칼슘 구매 등록 (누적 ${c.calciumPurchases.length}개)`);
+  renderCheckinLog();
+}
+function removeCalciumPurchase(id, index){
+  if(isViewer()) return;
+  const c = customers.find(x=>x.id===id);
+  if(!c || !c.calciumPurchases) return;
+  c.calciumPurchases.splice(index, 1);
+  syncCustomer(c);
+  showToast('구매 내역을 삭제했어요');
 }
 
 /* ---------------- 고객관리 ---------------- */
 function renderCustomerList(){
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">고객관리 (${customers.length}명 · VIP ${customers.filter(c=>c.purchased).length}명)</h2>
-    ${isViewer() ? '' : '<button class="btn btn-primary" style="margin-bottom:16px;" onclick="openCustomerForm()">+ 신규 고객 등록</button>'}
+    ${isViewer() ? '' : `
+      <button class="btn btn-primary" style="margin-bottom:8px;" onclick="openCustomerForm()">+ 신규 고객 등록</button>
+      <button class="btn btn-ghost" style="margin-bottom:16px;" onclick="document.getElementById('excelImportFile').click()">📊 엑셀로 여러 명 한번에 등록</button>
+      <input type="file" id="excelImportFile" accept=".xlsx,.xls" style="display:none;" onchange="handleExcelImport(event)">
+    `}
     <div class="searchbar"><input type="text" id="custSearch" placeholder="이름 또는 전화번호 검색" oninput="renderCustomerItems()"></div>
     <div id="custItems"></div>
   `;
@@ -795,7 +863,13 @@ function openCustomerForm(existing){
       <div class="check-field"><input type="checkbox" id="f-purchased" ${c.purchased?'checked':''}><label for="f-purchased">치료기 구매 완료 (VIP 등록)</label></div>
       <label class="field"><span>구매일</span><input type="date" id="f-purchasedate" value="${c.purchaseDate}"></label>
       <label class="field"><span>구매 모델</span><select id="f-model"><option value="">선택 안 함</option>${MODELS.map(m=>`<option value="${m}" ${c.purchaseModel===m?'selected':''}>${m}</option>`).join('')}</select></label>
-      <label class="field"><span>칼슘 구매일 (구매한 날짜를 선택하세요)</span><input type="date" id="f-calcium" value="${c.calciumDate||''}"></label>
+      <label class="field"><span>💊 칼슘 구매 내역 (누적 ${(c.calciumPurchases||[]).length}개)</span></label>
+      <div class="card" style="margin-top:-6px; margin-bottom:14px;">
+        ${(c.calciumPurchases||[]).length ? (c.calciumPurchases||[]).map((d,i)=>({d,i})).sort((a,b)=>b.d.localeCompare(a.d)).map(x=>`
+          <div class="row"><span class="sub">${x.d}</span>${isNew?'':`<button class="btn-mini" style="background:#E8B4B8;" onclick="removeCalciumPurchase('${c.id}', ${x.i})">삭제</button>`}</div>
+        `).join('') : '<div class="empty">구매 내역이 없어요</div>'}
+        ${isNew?'<div class="sub" style="font-size:12px; color:var(--muted); margin-top:6px;">저장 후 상세보기에서 구매 내역을 추가할 수 있어요</div>':`<button class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="addCalciumPurchase('${c.id}'); this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'));">+ 오늘 칼슘 구매 추가</button>`}
+      </div>
       <label class="field"><span>상담 메모</span><textarea id="f-memo" rows="3">${c.memo}</textarea></label>
       <button class="btn btn-primary" onclick="saveCustomer('${c.id}', ${isNew})">저장</button>
       ${!isNew?`<button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="if(confirm('정말 삭제할까요?')){deleteCustomer('${c.id}'); this.closest('.modal-bg').remove();}">고객 삭제</button>`:''}
@@ -825,12 +899,11 @@ function saveCustomer(id, isNew){
     purchased: document.getElementById('f-purchased').checked,
     purchaseDate: document.getElementById('f-purchasedate').value,
     purchaseModel: document.getElementById('f-model').value,
-    calciumDate: document.getElementById('f-calcium').value,
     memo: document.getElementById('f-memo').value,
   };
   let saved;
   if(isNew){
-    saved = {...data, firstVisit: todayStr(), visits:[]};
+    saved = {...data, firstVisit: todayStr(), visits:[], calciumPurchases:[]};
     customers.push(saved);
     showToast(`${name}님 등록 완료`);
   } else {
@@ -842,6 +915,28 @@ function saveCustomer(id, isNew){
   syncCustomer(saved);
   document.querySelectorAll('.modal-bg').forEach(m=>m.remove());
   render();
+  // 신규 등록 시, 소개자가 이번 등록으로 누적 홀수(3,5,7,9...)를 달성했으면 시상 팝업
+  if(isNew && saved.referrer){
+    const count = referralCount(saved.referrer.trim());
+    if(count>=3 && count%2===1){
+      showReferralMilestoneAlert(saved.referrer.trim(), count);
+    }
+  }
+}
+function showReferralMilestoneAlert(referrerName, count){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.innerHTML = `
+    <div class="modal" style="text-align:center; border-top:6px solid var(--amber);">
+      <div style="font-size:40px; margin:8px 0;">🎁</div>
+      <h3 style="margin:0 0 8px;">${referrerName}님 누적 소개 ${count}명 달성!</h3>
+      <div style="background:#FFFDF7; border:1px solid var(--amber-light); border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
+        간단한 시상을 준비해주세요.
+      </div>
+      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">확인</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
 }
 function deleteCustomer(id){
   if(isViewer()){ showToast('열람 전용 모드에서는 삭제할 수 없어요'); return; }
@@ -998,6 +1093,10 @@ function renderStats(){
   renderStatsBody();
 }
 function setStatMode(m){ statMode = m; renderStats(); }
+function lastVisitDate(c){
+  if(!c.visits || !c.visits.length) return c.firstVisit || null;
+  return c.visits.reduce((max,v)=> v.date>max ? v.date : max, c.visits[0].date);
+}
 // weekIndex번째 주(등록일 기준)에 4일 이상 출석했는지 확인
 function attendedInWeek(c, weekIndex){
   const start = addDaysStr(c.firstVisit, (weekIndex-1)*7);
@@ -1007,7 +1106,7 @@ function attendedInWeek(c, weekIndex){
 }
 function computeRetentionWindow(cohort, weekIndex){
   const today = todayStr();
-  const dayThreshold = weekIndex*7 - 1;
+  const dayThreshold = weekIndex*7 - 1; // 해당 주가 완전히 지났는지 판단하는 경과일수
   const eligible = cohort.filter(c => daysDiff(c.firstVisit, today) >= dayThreshold);
   const retained = eligible.filter(c => attendedInWeek(c, weekIndex));
   return {
@@ -1016,6 +1115,7 @@ function computeRetentionWindow(cohort, weekIndex){
     rate: eligible.length ? Math.round(retained.length/eligible.length*1000)/10 : null
   };
 }
+// 소개자의 첫방문일 대비, 피소개자가 실제 등록(첫방문)하기까지 걸린 기간 분석
 function computeReferralTiming(prefix){
   const referredInRange = customers.filter(c=>c.referrer && c.firstVisit && c.firstVisit.startsWith(prefix));
   const gaps = [];
@@ -1038,10 +1138,11 @@ function computeReferralTiming(prefix){
 }
 function computeRetention(prefix){
   const cohort = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(prefix));
-  const w2 = computeRetentionWindow(cohort, 2);
-  const w4 = computeRetentionWindow(cohort, 4);
-  const w8 = computeRetentionWindow(cohort, 8);
+  const w2 = computeRetentionWindow(cohort, 2);   // 2주
+  const w4 = computeRetentionWindow(cohort, 4);   // 한달(4주)
+  const w8 = computeRetentionWindow(cohort, 8);   // 두달(8주)
 
+  // 한 달(30일) 이상 다닌 고객 중 현재 5일 이상 연속 결석 중인 명단
   const today = todayStr();
   const monthPlusCustomers = cohort.filter(c => daysDiff(c.firstVisit, today) >= 30);
   const absentees = monthPlusCustomers.map(c=>{
@@ -1061,7 +1162,8 @@ function renderStatsBody(){
   const purchasedInRange = customers.filter(c=>c.purchased && c.purchaseDate && c.purchaseDate.startsWith(prefix));
   const amCount = visitsInRange.filter(v=>v.session==='오전').length;
   const pmCount = visitsInRange.filter(v=>v.session==='오후').length;
-  const calciumInRange = customers.filter(c=>c.calciumDate && c.calciumDate.startsWith(prefix));
+  const calciumTxCount = customers.reduce((sum,c)=>sum+(c.calciumPurchases||[]).filter(d=>d.startsWith(prefix)).length, 0);
+  const calciumCustCount = customers.filter(c=>(c.calciumPurchases||[]).some(d=>d.startsWith(prefix))).length;
 
   const modelCount = {}; MODELS.forEach(m=>modelCount[m]=0);
   purchasedInRange.forEach(c=>{ if(c.purchaseModel) modelCount[c.purchaseModel] = (modelCount[c.purchaseModel]||0)+1; });
@@ -1097,7 +1199,7 @@ function renderStatsBody(){
       ${MODELS.map(m=>`<div class="row"><span class="sub">${m}</span><span>${modelCount[m]}대</span></div>`).join('')}
     </div>
     <div class="card"><h3>💊 칼슘 구매 현황</h3>
-      <div class="row"><span class="sub">이 기간 칼슘 구매</span><span>${calciumInRange.length}명</span></div>
+      <div class="row"><span class="sub">이 기간 칼슘 구매</span><span>${calciumTxCount}개 (${calciumCustCount}명)</span></div>
     </div>
 
     <div class="card" style="border:2px solid var(--amber-light);">
@@ -1147,14 +1249,6 @@ function timeSlotSortKey(label){
   const [hh,mm] = label.split('~')[0].trim().split(':').map(Number);
   return hh*60+mm;
 }
-function renderTimeline(){
-  document.getElementById('main').innerHTML = `
-    <h2 class="section-title">시간대별 출석 (30분 단위)</h2>
-    <div class="card"><label class="field"><span>조회할 날짜</span><input type="date" id="timelineDateInput" value="${timelineDate}" onchange="timelineDate=this.value; renderTimelineBody();"></label></div>
-    <div id="timelineBody"></div>
-  `;
-  renderTimelineBody();
-}
 function toggleVisitConfirmed(customerId, date, session){
   const c = customers.find(x=>x.id===customerId);
   if(!c) return;
@@ -1164,12 +1258,19 @@ function toggleVisitConfirmed(customerId, date, session){
   syncCustomer(c);
   renderTimelineBody();
 }
+function renderTimeline(){
+  document.getElementById('main').innerHTML = `
+    <h2 class="section-title">시간대별 출석 (30분 단위)</h2>
+    <div class="card"><label class="field"><span>조회할 날짜</span><input type="date" id="timelineDateInput" value="${timelineDate}" onchange="timelineDate=this.value; renderTimelineBody();"></label></div>
+    <div id="timelineBody"></div>
+  `;
+  renderTimelineBody();
+}
 function renderTimelineBody(){
   const box = document.getElementById('timelineBody');
   const visits = customers.flatMap(c=>c.visits.filter(v=>v.date===timelineDate).map(v=>({...v, cust:c})));
   if(!visits.length){ box.innerHTML = '<div class="empty">이 날짜에 출석한 고객이 없어요</div>'; return; }
 
-  // 이 날짜 방문자 중 3일 연속 출석(3,6,9...) 쿠폰 대상자 요약
   const couponToday = [...new Map(visits.map(v=>[v.cust.id, v.cust])).values()]
     .filter(c=>isCouponDay(c, timelineDate))
     .map(c=>({c, streak:currentStreak(c, timelineDate)}));
@@ -1203,6 +1304,83 @@ function renderTimelineBody(){
       </div>`).join('')}
     </div>`;
   }).join('');
+}
+
+/* ---------------- 엑셀로 고객 일괄 등록 ---------------- */
+function excelDateToStr(val){
+  if(val === undefined || val === null || val === '') return '';
+  if(val instanceof Date) return val.toISOString().slice(0,10);
+  if(typeof val === 'number'){
+    // 엑셀 날짜 시리얼 번호 처리
+    const d = XLSX.SSF.parse_date_code(val);
+    if(!d) return '';
+    return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+  }
+  const s = String(val).trim();
+  // 이미 YYYY-MM-DD 형태면 그대로, 아니면 Date 파싱 시도
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const parsed = new Date(s);
+  if(!isNaN(parsed.getTime())) return parsed.toISOString().slice(0,10);
+  return '';
+}
+async function handleExcelImport(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  e.target.value = ''; // 같은 파일 다시 선택 가능하도록 초기화
+
+  const reader = new FileReader();
+  reader.onload = async function(evt){
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true});
+      const sheetName = wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:''});
+
+      if(!rows.length){ alert('엑셀에 데이터가 없어요.'); return; }
+
+      const newCustomers = [];
+      const skipped = [];
+      rows.forEach((row, i)=>{
+        const name = String(row['이름']||'').trim();
+        const phone = String(row['전화번호']||'').trim();
+        if(!name || !phone){ skipped.push(i+2); return; } // 이름/전화번호 없으면 건너뜀 (엑셀 실제 행번호는 헤더+1)
+        const firstVisit = excelDateToStr(row['첫방문일']) || todayStr();
+        newCustomers.push({
+          id: uid(),
+          name, phone,
+          birth: excelDateToStr(row['생년월일']),
+          healthTag: String(row['건강관심사']||'').trim(),
+          threeManStart: excelDateToStr(row['3만볼트시작일']) || firstVisit,
+          fiveManDate: excelDateToStr(row['5만볼트가능일']),
+          referrer: String(row['소개자']||'').trim(),
+          referralBenefitUsed: false,
+          trialDisplay: false, trialStart: '',
+          purchased: String(row['구매여부']||'').trim().toUpperCase()==='TRUE',
+          purchaseDate: excelDateToStr(row['구매일']),
+          purchaseModel: String(row['구매모델']||'').trim(),
+          calciumDate: '', calciumPurchases: [],
+          memo: String(row['메모']||'').trim(),
+          firstVisit, visits: []
+        });
+      });
+
+      if(!newCustomers.length){ alert('등록할 수 있는 행이 없어요. 이름/전화번호가 채워졌는지 확인해주세요.'); return; }
+
+      const ok = confirm(`${newCustomers.length}명을 등록합니다.${skipped.length?` (이름/전화번호 없는 ${skipped.length}개 행은 건너뜀)`:''}\n계속할까요?`);
+      if(!ok) return;
+
+      showToast(`${newCustomers.length}명 등록 중...`);
+      for(const c of newCustomers){
+        customers.push(c);
+        await syncCustomer(c);
+      }
+      showToast(`✅ ${newCustomers.length}명 등록 완료!`);
+      renderCustomerList();
+    }catch(err){
+      alert('엑셀 파일을 읽는 중 문제가 생겼어요. 양식이 맞는지 확인해주세요.\n(' + err.message + ')');
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 /* ---------------- 백업 / 불러오기 (수동 보조용) ---------------- */
