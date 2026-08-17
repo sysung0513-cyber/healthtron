@@ -178,7 +178,7 @@ const ELECTRODE_SEGMENT_DAYS = 20;
 const ELECTRODE_THRESHOLD = 15;
 const ELECTRODE_MAX_SEGMENTS = 6;
 function computeElectrodeSegments(c, asOfDate){
-  if(!c.firstVisit) return [];
+  if(!c.firstVisit || isNaN(new Date(c.firstVisit+'T00:00:00').getTime())) return [];
   const segs = [];
   let prevEnd = null;
   for(let i=1; i<=ELECTRODE_MAX_SEGMENTS; i++){
@@ -256,7 +256,8 @@ function daysUntilBirthday(birthStr, todayStr_){
   return daysDiff(todayStr_, next);
 }
 function addDaysStr(dateStr, n){
-  const d = new Date(dateStr+'T00:00:00');
+  let d = new Date(dateStr+'T00:00:00');
+  if(isNaN(d.getTime())) d = new Date(todayStr()+'T00:00:00'); // 잘못된/빈 날짜면 오늘 날짜로 대체
   d.setDate(d.getDate()+n);
   return d.toISOString().slice(0,10);
 }
