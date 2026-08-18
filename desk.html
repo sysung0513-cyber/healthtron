@@ -198,8 +198,8 @@ function electrodeCurrentProgress(c, asOfDate){
   const current = segs.find(s=>!s.complete);
   if(!current) return null;
   const attendedSoFar = new Set((c.visits||[]).filter(v=>v.date>=current.start && v.date<=asOfDate).map(v=>v.date)).size;
-  let bizDaysSoFar = 0, d = current.start;
-  while(d<=asOfDate){
+  let bizDaysSoFar = 0, d = current.start, guard = 0;
+  while(d<=asOfDate && guard++ < 400){ // 400일 넘게 걸리면 데이터가 이상한 것 → 안전하게 중단
     const dow = new Date(d+'T00:00:00').getDay();
     if(dow!==0 && dow!==6 && !KOREAN_HOLIDAYS.has(d)) bizDaysSoFar++;
     d = addDaysStr(d,1);
@@ -347,8 +347,8 @@ function shiftMonth(prefix, delta){
 function addBusinessDays(startStr, totalDays){
   let d = new Date(startStr+'T00:00:00');
   if(isNaN(d.getTime())) d = new Date(todayStr()+'T00:00:00'); // 잘못된/빈 날짜면 오늘 날짜로 대체
-  let count = 0;
-  while(true){
+  let count = 0, guard = 0;
+  while(guard++ < 10000){ // 안전장치: 만 번 넘게 돌면 데이터 이상 → 중단
     const dow = d.getDay();
     const ds = d.toISOString().slice(0,10);
     if(dow!==0 && dow!==6 && !KOREAN_HOLIDAYS.has(ds)) count++;
@@ -384,12 +384,21 @@ function setStatus(ok, msg){
 // 정제 불가능하면 빈 문자열 반환(→ 이후 코드에서 안전하게 fallback 처리됨).
 function cleanDateStr(v){
   if(!v) return '';
-  const s = String(v);
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/); // 앞부분 YYYY-MM-DD만 추출 (시간 붙어있어도 OK)
-  if(m) return m[1];
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); // 앞부분 YYYY-MM-DD만 추출 (시간 붙어있어도 OK)
+  if(m){
+    const y = parseInt(m[1],10);
+    if(y < 1900 || y > 2100) return ''; // 말이 안 되는 연도는 거부
+    return m[0].slice(0,10);
+  }
+  // 순수 숫자만 있는 문자열(예: "45000")은 날짜로 취급하지 않음 — new Date()가 연도로 잘못 해석해서
+  // 서기 45000년 같은 값이 나오는 걸 막기 위함 (이게 실제로 앱이 멈추는 원인이었음)
+  if(/^\d+(\.\d+)?$/.test(s)) return '';
   const d = new Date(s);
-  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
-  return '';
+  if(isNaN(d.getTime())) return '';
+  const y2 = d.getFullYear();
+  if(y2 < 1900 || y2 > 2100) return ''; // 연도가 비정상적이면 거부
+  return d.toISOString().slice(0,10);
 }
 async function fetchCustomersFromSheet(){
   const res = await fetch(SHEET_API_URL + '?action=list');
