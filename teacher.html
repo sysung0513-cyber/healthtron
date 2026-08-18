@@ -214,14 +214,18 @@ function electrodeJustCompletedToday(c, asOfDate){
 window._seenElectrodeAlerts = window._seenElectrodeAlerts || new Set();
 function checkElectrodeCouponAlerts(){
   const today = todayStr();
-  customers.forEach(c=>{
-    if(!c.firstVisit) return;
-    electrodeJustCompletedToday(c, today).forEach(s=>{
-      const key = c.id + '_elec' + s.index;
-      if(window._seenElectrodeAlerts.has(key)) return;
-      window._seenElectrodeAlerts.add(key);
-      showElectrodeCouponAlert(c, s);
-    });
+  (customers||[]).filter(Boolean).forEach(c=>{
+    try{
+      if(!c.firstVisit) return;
+      electrodeJustCompletedToday(c, today).forEach(s=>{
+        const key = c.id + '_elec' + s.index;
+        if(window._seenElectrodeAlerts.has(key)) return;
+        window._seenElectrodeAlerts.add(key);
+        showElectrodeCouponAlert(c, s);
+      });
+    }catch(err){
+      console.error('전극쿠폰 체크 에러 (고객:'+((c&&c.name)||(c&&c.id)||'알수없음')+'):', err);
+    }
   });
 }
 function showElectrodeCouponAlert(c, seg){
@@ -418,22 +422,26 @@ window._seenCouponAlerts = window._seenCouponAlerts || new Set();
 window._seenMilestoneAlerts = window._seenMilestoneAlerts || new Set();
 function checkCouponAlerts(){
   const today = todayStr();
-  customers.forEach(c=>{
-    const checkedInToday = c.visits.some(v=>v.date===today);
-    if(!checkedInToday) return;
-    if(isCouponDay(c, today)){
-      const key = c.id + '_' + today;
-      if(!window._seenCouponAlerts.has(key)){
-        window._seenCouponAlerts.add(key);
-        showCouponAlert(c, currentStreak(c, today));
+  (customers||[]).filter(Boolean).forEach(c=>{
+    try{
+      const checkedInToday = c.visits.some(v=>v.date===today);
+      if(!checkedInToday) return;
+      if(isCouponDay(c, today)){
+        const key = c.id + '_' + today;
+        if(!window._seenCouponAlerts.has(key)){
+          window._seenCouponAlerts.add(key);
+          showCouponAlert(c, currentStreak(c, today));
+        }
       }
-    }
-    if(isMilestoneDay(c, today)){
-      const mkey = c.id + '_milestone_' + today;
-      if(!window._seenMilestoneAlerts.has(mkey)){
-        window._seenMilestoneAlerts.add(mkey);
-        showMilestoneAlert(c, totalAttendanceDays(c, today));
+      if(isMilestoneDay(c, today)){
+        const mkey = c.id + '_milestone_' + today;
+        if(!window._seenMilestoneAlerts.has(mkey)){
+          window._seenMilestoneAlerts.add(mkey);
+          showMilestoneAlert(c, totalAttendanceDays(c, today));
+        }
       }
+    }catch(err){
+      console.error('쿠폰 체크 에러 (고객:'+((c&&c.name)||(c&&c.id)||'알수없음')+'):', err);
     }
   });
 }
@@ -871,6 +879,7 @@ function weeklyAttendanceForMonth(c, yearMonthStr){
   return Object.keys(buckets).map(Number).sort((a,b)=>a-b).map(b=>({week:b, count:buckets[b].size}));
 }
 function openCustomerDetail(id){
+try{
   const c = customers.find(x=>x.id===id);
   if(!c) return;
   const lv = lastVisit(c);
@@ -940,6 +949,10 @@ function openCustomerDetail(id){
       ${isViewer() ? '' : `<button class="btn btn-primary" onclick="this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'))">정보 수정</button>`}
     </div>`;
   document.body.appendChild(wrap);
+}catch(err){
+  console.error('openCustomerDetail 에러:', err);
+  showToast('⚠️ 이 고객 정보를 불러오는 중 문제가 생겼어요. 데이터를 확인해주세요.');
+}
 }
 
 /* ---------------- QR 발급 ---------------- */
