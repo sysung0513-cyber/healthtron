@@ -380,14 +380,36 @@ function setStatus(ok, msg){
   el.className = 'status-banner ' + (ok?'status-ok':'status-warn');
   el.textContent = msg;
 }
+// 어떤 형태(전체 타임스탬프, 잘못된 값 등)로 들어와도 'YYYY-MM-DD' 형태로 정제.
+// 정제 불가능하면 빈 문자열 반환(→ 이후 코드에서 안전하게 fallback 처리됨).
+function cleanDateStr(v){
+  if(!v) return '';
+  const s = String(v);
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/); // 앞부분 YYYY-MM-DD만 추출 (시간 붙어있어도 OK)
+  if(m) return m[1];
+  const d = new Date(s);
+  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  return '';
+}
 async function fetchCustomersFromSheet(){
   const res = await fetch(SHEET_API_URL + '?action=list');
   const data = await res.json();
   return (data.customers || []).map(c=>{
     // 기존 calciumDate(단일 날짜)만 있고 calciumPurchases(누적 배열)가 없으면 1회 마이그레이션
-    let calciumPurchases = c.calciumPurchases || [];
-    if(!calciumPurchases.length && c.calciumDate) calciumPurchases = [c.calciumDate];
-    return {...c, visits: c.visits || [], calciumPurchases};
+    let calciumPurchases = (c.calciumPurchases || []).map(cleanDateStr).filter(Boolean);
+    if(!calciumPurchases.length && c.calciumDate) calciumPurchases = [cleanDateStr(c.calciumDate)].filter(Boolean);
+    const visits = (c.visits || []).map(v=>({...v, date: cleanDateStr(v.date)})).filter(v=>v.date);
+    return {
+      ...c,
+      birth: cleanDateStr(c.birth),
+      threeManStart: cleanDateStr(c.threeManStart),
+      fiveManDate: cleanDateStr(c.fiveManDate),
+      trialStart: cleanDateStr(c.trialStart),
+      purchaseDate: cleanDateStr(c.purchaseDate),
+      firstVisit: cleanDateStr(c.firstVisit),
+      visits,
+      calciumPurchases,
+    };
   });
 }
 async function loadFromSheet(){

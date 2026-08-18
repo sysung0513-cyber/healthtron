@@ -450,13 +450,33 @@ function setStatus(ok, msg){
   el.className = 'status-banner ' + (ok?'status-ok':'status-warn');
   el.textContent = msg;
 }
+function cleanDateStr(v){
+  if(!v) return '';
+  const s = String(v);
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if(m) return m[1];
+  const d = new Date(s);
+  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  return '';
+}
 async function fetchCustomersFromSheet(){
   const res = await fetch(SHEET_API_URL + '?action=list');
   const data = await res.json();
   return (data.customers || []).map(c=>{
-    let calciumPurchases = c.calciumPurchases || [];
-    if(!calciumPurchases.length && c.calciumDate) calciumPurchases = [c.calciumDate];
-    return {...c, visits: c.visits || [], calciumPurchases};
+    let calciumPurchases = (c.calciumPurchases || []).map(cleanDateStr).filter(Boolean);
+    if(!calciumPurchases.length && c.calciumDate) calciumPurchases = [cleanDateStr(c.calciumDate)].filter(Boolean);
+    const visits = (c.visits || []).map(v=>({...v, date: cleanDateStr(v.date)})).filter(v=>v.date);
+    return {
+      ...c,
+      birth: cleanDateStr(c.birth),
+      threeManStart: cleanDateStr(c.threeManStart),
+      fiveManDate: cleanDateStr(c.fiveManDate),
+      trialStart: cleanDateStr(c.trialStart),
+      purchaseDate: cleanDateStr(c.purchaseDate),
+      firstVisit: cleanDateStr(c.firstVisit),
+      visits,
+      calciumPurchases,
+    };
   });
 }
 async function loadFromSheet(){
