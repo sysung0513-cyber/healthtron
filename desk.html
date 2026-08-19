@@ -851,7 +851,7 @@ function renderCustomerList(){
     <h2 class="section-title">고객관리 (${customers.length}명 · VIP ${customers.filter(c=>c.purchased).length}명)</h2>
     ${isViewer() ? '' : `
       <button class="btn btn-primary" style="margin-bottom:8px;" onclick="openCustomerForm()">+ 신규 고객 등록</button>
-      <button class="btn btn-ghost" style="margin-bottom:16px;" onclick="document.getElementById('excelImportFile').click()">📊 엑셀로 여러 명 한번에 등록</button>
+      <button class="btn btn-ghost" style="margin-bottom:16px;" onclick="document.getElementById('excelImportFile').click()">📊 엑셀로 여러 명 한번에 등록/업데이트</button>
       <input type="file" id="excelImportFile" accept=".xlsx,.xls" style="display:none;" onchange="handleExcelImport(event)">
     `}
     <div class="searchbar"><input type="text" id="custSearch" placeholder="이름 또는 전화번호 검색" oninput="renderCustomerItems()"></div>
@@ -1092,7 +1092,7 @@ function renderQrList(){
   const box = document.getElementById('qrList');
   let list = q ? customers.filter(c=>c.name.includes(q)) : customers;
   if(!list.length){ box.innerHTML = '<div class="empty">고객을 검색해서 QR카드를 만들어보세요</div>'; return; }
-  box.innerHTML = list.slice(0,10).map(c=>`<div class="cust-item" onclick="showQr('${c.id}')"><div class="info"><div class="nm">${c.name} ${c.purchased?'<span class=\"badge vip\">VIP</span>':''}</div><div class="meta">${c.phone}</div></div></div>`).join('');
+  box.innerHTML = list.map(c=>`<div class="cust-item" onclick="showQr('${c.id}')"><div class="info"><div class="nm">${c.name} ${c.purchased?'<span class=\"badge vip\">VIP</span>':''}</div><div class="meta">${c.phone}</div></div></div>`).join('');
 }
 function showQr(id){
   const c = customers.find(x=>x.id===id);
@@ -1378,43 +1378,77 @@ async function handleExcelImport(e){
 
       if(!rows.length){ alert('엑셀에 데이터가 없어요.'); return; }
 
-      const newCustomers = [];
+      // 전화번호를 010-XXXX-XXXX 형식으로 통일 (숫자만 들어와도 자동 보정)
+      function cleanPhone(v){
+        if(v===undefined || v===null || v==='') return '';
+        let digits;
+        if(typeof v === 'number'){
+          digits = String(Math.trunc(v));
+          if(!digits.startsWith('0')) digits = '0'+digits;
+        } else {
+          digits = String(v).replace(/\D/g,'');
+          if(digits && !digits.startsWith('0')) digits = '0'+digits;
+        }
+        if(digits.length===11 && digits.startsWith('01')) return digits.slice(0,3)+'-'+digits.slice(3,7)+'-'+digits.slice(7);
+        if(digits.length===10 && digits.startsWith('01')) return digits.slice(0,3)+'-'+digits.slice(3,6)+'-'+digits.slice(6);
+        return digits || String(v).trim();
+      }
+
+      const toUpdate = [];
+      const toCreate = [];
       const skipped = [];
       rows.forEach((row, i)=>{
         const name = String(row['이름']||'').trim();
-        const phone = String(row['전화번호']||'').trim();
+        const phone = cleanPhone(row['전화번호']);
         if(!name || !phone){ skipped.push(i+2); return; } // 이름/전화번호 없으면 건너뜀 (엑셀 실제 행번호는 헤더+1)
-        const firstVisit = excelDateToStr(row['첫방문일']) || todayStr();
-        newCustomers.push({
-          id: uid(),
-          name, phone,
-          birth: excelDateToStr(row['생년월일']),
-          healthTag: String(row['건강관심사']||'').trim(),
-          threeManStart: excelDateToStr(row['3만볼트시작일']) || firstVisit,
-          fiveManDate: excelDateToStr(row['5만볼트가능일']),
-          referrer: String(row['소개자']||'').trim(),
-          referralBenefitUsed: false,
-          trialDisplay: false, trialStart: '',
-          purchased: String(row['구매여부']||'').trim().toUpperCase()==='TRUE',
-          purchaseDate: excelDateToStr(row['구매일']),
-          purchaseModel: String(row['구매모델']||'').trim(),
-          calciumDate: '', calciumPurchases: [],
-          memo: String(row['메모']||'').trim(),
-          firstVisit, visits: []
-        });
+
+        const existing = customers.find(c=>c.phone===phone);
+
+        // 엑셀 값이 채워진 항목만 반영(빈 칸은 기존 값을 지우지 않음)
+        const patch = {};
+        const setIfPresent = (key, val) => { if(val!==''&&val!==undefined&&val!==null) patch[key]=val; };
+        setIfPresent('name', name);
+        setIfPresent('birth', excelDateToStr(row['생년월일']));
+        setIfPresent('healthTag', String(row['건강관심사']||'').trim());
+        setIfPresent('threeManStart', excelDateToStr(row['3만볼트시작일']));
+        setIfPresent('fiveManDate', excelDateToStr(row['5만볼트가능일']));
+        setIfPresent('referrer', String(row['소개자']||'').trim());
+        if(String(row['구매여부']||'').trim()!=='') patch.purchased = String(row['구매여부']).trim().toUpperCase()==='TRUE';
+        setIfPresent('purchaseDate', excelDateToStr(row['구매일']));
+        setIfPresent('purchaseModel', String(row['구매모델']||'').trim());
+        setIfPresent('memo', String(row['메모']||'').trim());
+
+        if(existing){
+          toUpdate.push(Object.assign({}, existing, patch, {phone})); // id/firstVisit/visits/calciumPurchases 등은 기존 값 유지
+        } else {
+          const firstVisit = excelDateToStr(row['첫방문일']) || todayStr();
+          toCreate.push(Object.assign({
+            id: uid(), name, phone,
+            birth: '', healthTag: '', threeManStart: firstVisit, fiveManDate: '',
+            referrer: '', referralBenefitUsed: false, trialDisplay: false, trialStart: '',
+            purchased: false, purchaseDate: '', purchaseModel: '',
+            calciumDate: '', calciumPurchases: [], memo: '',
+            firstVisit, visits: [],
+          }, patch)); // 엑셀에 채워진 값으로 위 기본값 덮어씀
+        }
       });
 
-      if(!newCustomers.length){ alert('등록할 수 있는 행이 없어요. 이름/전화번호가 채워졌는지 확인해주세요.'); return; }
+      if(!toUpdate.length && !toCreate.length){ alert('처리할 수 있는 행이 없어요. 이름/전화번호가 채워졌는지 확인해주세요.'); return; }
 
-      const ok = confirm(`${newCustomers.length}명을 등록합니다.${skipped.length?` (이름/전화번호 없는 ${skipped.length}개 행은 건너뜀)`:''}\n계속할까요?`);
+      const ok = confirm(`신규 등록 ${toCreate.length}명, 기존 고객 업데이트 ${toUpdate.length}명입니다.${skipped.length?` (이름/전화번호 없는 ${skipped.length}개 행은 건너뜀)`:''}\n계속할까요?`);
       if(!ok) return;
 
-      showToast(`${newCustomers.length}명 등록 중...`);
-      for(const c of newCustomers){
+      showToast(`처리 중... (${toCreate.length+toUpdate.length}명)`);
+      for(const c of toCreate){
         customers.push(c);
         await syncCustomer(c);
       }
-      showToast(`✅ ${newCustomers.length}명 등록 완료!`);
+      for(const c of toUpdate){
+        const idx = customers.findIndex(x=>x.id===c.id);
+        if(idx!==-1) customers[idx] = c;
+        await syncCustomer(c);
+      }
+      showToast(`✅ 완료! 신규 ${toCreate.length}명 · 업데이트 ${toUpdate.length}명`);
       renderCustomerList();
     }catch(err){
       alert('엑셀 파일을 읽는 중 문제가 생겼어요. 양식이 맞는지 확인해주세요.\n(' + err.message + ')');
