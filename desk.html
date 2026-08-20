@@ -80,6 +80,34 @@
   .qr-card #qrbox{display:flex; justify-content:center; margin:14px 0;}
   .qr-card .cn{font-family:'Gowun Dodum',sans-serif; font-size:20px; color:var(--teal); margin-bottom:4px;}
   .qr-card .cid{font-size:11px; color:var(--muted); letter-spacing:1px;}
+
+  /* ---- 폼텍 라벨지 일괄 인쇄 ----
+     실제 라벨지 제품에 맞추려면 아래 grid-template-columns 칸수와
+     .label-cell의 크기, .label-sheet의 gap/padding만 조정하면 됩니다. */
+  .label-sheet{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4mm 3mm;
+    padding: 8mm 5mm;
+    max-width: 210mm; /* A4 폭 */
+    margin: 0 auto;
+  }
+  .label-cell{
+    border: 1px dashed #ddd; /* 화면 확인용 안내선(인쇄시 자동 숨김) */
+    border-radius: 4px;
+    padding: 3mm;
+    text-align: center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    break-inside: avoid;
+  }
+  .label-name{ font-size:11px; font-weight:700; color:var(--teal); margin-bottom:2mm; }
+  .label-qrbox{ display:flex; justify-content:center; }
+  @media print{
+    header, .tabbar, .searchbar, #qrList, .status-banner { display:none !important; }
+    .label-cell{ border-color: transparent; }
+    body{ padding:0; }
+    main{ padding:0; max-width:none; }
+  }
   .toast{position:fixed; top:70px; left:50%; transform:translateX(-50%) scale(0.9); background:var(--teal); color:#fff; padding:12px 22px; border-radius:10px; font-weight:700; font-size:14px; opacity:0; transition:.25s; z-index:60; pointer-events:none;}
   .toast.show{opacity:1; transform:translateX(-50%) scale(1);}
   #importFile{display:none;}
@@ -670,7 +698,7 @@ function renderCheckin(){
     </div>
     <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
       <h3>📷 QR 스캐너로 체크인 (일반·VIP 공통)</h3>
-      <input type="text" id="scanInput" placeholder="여기를 탭한 뒤 스캐너로 QR을 스캔하세요" autocomplete="off" onkeydown="handleScanInput(event)">
+      <input type="text" id="scanInput" placeholder="여기를 탭한 뒤 스캐너로 QR을 스캔하세요" autocomplete="off" onkeydown="handleScanInput(event)" oninput="handleScanInputDebounced(event)">
       <div style="font-size:12px; color:var(--muted); margin-top:8px;">스캐너가 QR을 읽으면 자동으로 출석 처리돼요. 화면을 조작한 뒤에는 이 입력창을 한 번 다시 탭해주세요.</div>
     </div>
     <div class="searchbar"><input type="text" id="checkinSearch" placeholder="QR이 없으면 이름/전화번호로 직접 검색" oninput="renderCheckinResults()"></div>
@@ -691,6 +719,21 @@ function handleScanInput(e){
   const c = customers.find(x=>x.id===val);
   if(!c){ showToast('등록되지 않은 QR이에요'); return; }
   doCheckin(c.id);
+}
+// Enter 키를 안 보내는 스캐너 대응: 입력이 잠깐(150ms) 멈추면 자동으로 체크인 시도.
+// 사람이 손으로 타이핑하는 속도보다 훨씬 빠르게 값이 채워지는 스캐너의 특성을 이용.
+window._scanDebounceTimer = null;
+function handleScanInputDebounced(e){
+  const el = e.target;
+  clearTimeout(window._scanDebounceTimer);
+  window._scanDebounceTimer = setTimeout(()=>{
+    const val = el.value.trim();
+    if(!val) return;
+    const c = customers.find(x=>x.id===val);
+    if(!c) return; // 사람이 직접 타이핑 중일 수도 있으니, 못 찾았다고 바로 에러 띄우지 않음
+    el.value = '';
+    doCheckin(c.id);
+  }, 150);
 }
 function renderCheckinResults(){
   const q = (document.getElementById('checkinSearch')?.value || '').trim();
@@ -1028,6 +1071,10 @@ try{
           ${(c.calciumPurchases||[]).length?`<span class="badge amber">💊 칼슘 누적 ${c.calciumPurchases.length}개</span>`:''}
         </div>
       </div>
+      <div class="card" style="text-align:center;">
+        <div id="detailQrBox" style="display:flex; justify-content:center; margin:4px 0 8px;"></div>
+        <div class="sub" style="font-size:12px; color:var(--muted);">${c.id}</div>
+      </div>
       <div class="card">
         <div class="row"><span class="sub">3만볼트 이용기한</span><span>${threeManEnd(c)} <span class="${ddayBadge(threeManEnd(c)).cls}">${ddayBadge(threeManEnd(c)).text}</span></span></div>
         <div class="row"><span class="sub">5만볼트 이용 가능일</span><span>${c.fiveManDate||'미지정'}</span></div>
@@ -1071,6 +1118,7 @@ try{
       ${isViewer() ? '' : `<button class="btn btn-primary" onclick="this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'))">정보 수정</button>`}
     </div>`;
   document.body.appendChild(wrap);
+  new QRCode(document.getElementById('detailQrBox'), {text: c.id, width:120, height:120, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
 }catch(err){
   console.error('openCustomerDetail 에러:', err);
   showToast('⚠️ 이 고객 정보를 불러오는 중 문제가 생겼어요. 데이터를 확인해주세요.');
@@ -1078,21 +1126,44 @@ try{
 }
 
 /* ---------------- QR 발급 ---------------- */
+let qrSelected = new Set();
 function renderQrPicker(){
+  qrSelected = new Set();
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">QR카드 발급 (일반·VIP 공통)</h2>
     <div class="searchbar"><input type="text" id="qrSearch" placeholder="이름 검색" oninput="renderQrList()"></div>
+    <div class="row" style="padding:6px 2px;">
+      <button class="btn btn-ghost" onclick="toggleSelectAllQr()">전체선택/해제</button>
+      <button class="btn btn-amber" onclick="renderBatchQrPrint()">🖨 선택 <span id="qrSelCount">0</span>명 QR 일괄 인쇄</button>
+    </div>
     <div id="qrList"></div>
     <div id="qrDisplay"></div>
   `;
+  renderQrList();
+}
+function toggleSelectAllQr(){
+  const q = (document.getElementById('qrSearch')?.value || '').trim();
+  const list = q ? customers.filter(c=>c.name.includes(q)) : customers;
+  const allSelected = list.every(c=>qrSelected.has(c.id));
+  list.forEach(c=> allSelected ? qrSelected.delete(c.id) : qrSelected.add(c.id));
+  renderQrList();
+}
+function toggleQrSelect(id, ev){
+  ev.stopPropagation();
+  if(qrSelected.has(id)) qrSelected.delete(id); else qrSelected.add(id);
   renderQrList();
 }
 function renderQrList(){
   const q = (document.getElementById('qrSearch')?.value || '').trim();
   const box = document.getElementById('qrList');
   let list = q ? customers.filter(c=>c.name.includes(q)) : customers;
+  const countEl = document.getElementById('qrSelCount');
+  if(countEl) countEl.textContent = qrSelected.size;
   if(!list.length){ box.innerHTML = '<div class="empty">고객을 검색해서 QR카드를 만들어보세요</div>'; return; }
-  box.innerHTML = list.map(c=>`<div class="cust-item" onclick="showQr('${c.id}')"><div class="info"><div class="nm">${c.name} ${c.purchased?'<span class=\"badge vip\">VIP</span>':''}</div><div class="meta">${c.phone}</div></div></div>`).join('');
+  box.innerHTML = list.map(c=>`<div class="cust-item" onclick="showQr('${c.id}')" style="display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" onclick="toggleQrSelect('${c.id}', event)" ${qrSelected.has(c.id)?'checked':''} style="width:20px; height:20px; flex-shrink:0;">
+      <div class="info"><div class="nm">${c.name} ${c.purchased?'<span class="badge vip">VIP</span>':''}</div><div class="meta">${c.phone}</div></div>
+    </div>`).join('');
 }
 function showQr(id){
   const c = customers.find(x=>x.id===id);
@@ -1105,9 +1176,35 @@ function showQr(id){
       <div id="qrbox"></div>
       <div class="cid">${c.id}</div>
     </div>
-    <div style="text-align:center; margin-top:16px;"><button class="btn btn-amber" onclick="window.print()">🖨 인쇄하기</button></div>
+    <div style="text-align:center; margin-top:16px;"><button class="btn btn-amber" onclick="window.print()">🖨 이 사람만 인쇄하기</button></div>
   `;
   new QRCode(document.getElementById('qrbox'), {text: c.id, width:150, height:150, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
+}
+
+/* ---------------- 일괄 QR 인쇄 (라벨지용) ----------------
+   폼텍 라벨지 규격에 맞춰 조정하려면 아래 LABEL_COLS/ROWS와
+   .label-sheet / .label-cell 의 width/height/gap 값만 바꾸면 됩니다.
+   기본값은 A4에 4열×6행(24칸) 일반적인 규격 기준입니다. */
+const LABEL_COLS = 4;
+const LABEL_ROWS = 6;
+function renderBatchQrPrint(){
+  const ids = [...qrSelected];
+  if(!ids.length){ alert('선택된 고객이 없어요. 목록에서 체크박스로 먼저 선택해주세요.'); return; }
+  const list = ids.map(id=>customers.find(c=>c.id===id)).filter(Boolean);
+  const box = document.getElementById('qrDisplay');
+  box.innerHTML = `
+    <div class="sub" style="margin:10px 2px;">총 ${list.length}명 선택됨 · 라벨지 ${LABEL_COLS}×${LABEL_ROWS}(${LABEL_COLS*LABEL_ROWS}칸) 기준 배치</div>
+    <div id="batchQrSheet" class="label-sheet"></div>
+    <div style="text-align:center; margin:16px 0 40px;"><button class="btn btn-amber" onclick="window.print()">🖨 전체 인쇄하기</button></div>
+  `;
+  const sheet = document.getElementById('batchQrSheet');
+  list.forEach(c=>{
+    const cell = document.createElement('div');
+    cell.className = 'label-cell';
+    cell.innerHTML = `<div class="label-name">${c.name}</div><div class="label-qrbox" id="lqr-${c.id}"></div>`;
+    sheet.appendChild(cell);
+    new QRCode(document.getElementById('lqr-'+c.id), {text: c.id, width:70, height:70, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
+  });
 }
 
 /* ---------------- 통계 (월별/연도별) ---------------- */
