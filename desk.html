@@ -83,27 +83,33 @@
 
   /* ---- 폼텍 라벨지 일괄 인쇄 ----
      실제 라벨지 제품에 맞추려면 아래 grid-template-columns 칸수와
-     .label-cell의 크기, .label-sheet의 gap/padding만 조정하면 됩니다. */
+     .label-cell의 크기, .label-sheet의 gap/padding만 조정하면 됩니다.
+     ※ 현재값: 폼텍 V3330 (63.5×38.1mm, 3열×7행=21칸, A4 기준) */
   .label-sheet{
     display:grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 4mm 3mm;
-    padding: 8mm 5mm;
-    max-width: 210mm; /* A4 폭 */
+    grid-template-columns: repeat(3, 63.5mm);
+    grid-auto-rows: 38.1mm;
+    gap: 0mm;
+    padding: 15.15mm 9.75mm;
+    width: 210mm; /* A4 폭 */
     margin: 0 auto;
+    box-sizing: border-box;
   }
   .label-cell{
     border: 1px dashed #ddd; /* 화면 확인용 안내선(인쇄시 자동 숨김) */
-    border-radius: 4px;
-    padding: 3mm;
+    box-sizing: border-box;
+    padding: 2mm;
     text-align: center;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     break-inside: avoid;
+    overflow: hidden;
   }
-  .label-name{ font-size:11px; font-weight:700; color:var(--teal); margin-bottom:2mm; }
+  .label-name{ font-size:9px; font-weight:700; color:var(--teal); margin-bottom:1mm; }
   .label-qrbox{ display:flex; justify-content:center; }
+  .label-qrbox canvas, .label-qrbox img{ width:24mm !important; height:24mm !important; }
   @media print{
-    header, .tabbar, .searchbar, #qrList, .status-banner { display:none !important; }
+    @page{ size:A4; margin:0; }
+    header, .tabbar, .searchbar, #qrList, .status-banner, .sub { display:none !important; }
     .label-cell{ border-color: transparent; }
     body{ padding:0; }
     main{ padding:0; max-width:none; }
@@ -1242,8 +1248,8 @@ function showQr(id){
    폼텍 라벨지 규격에 맞춰 조정하려면 아래 LABEL_COLS/ROWS와
    .label-sheet / .label-cell 의 width/height/gap 값만 바꾸면 됩니다.
    기본값은 A4에 4열×6행(24칸) 일반적인 규격 기준입니다. */
-const LABEL_COLS = 4;
-const LABEL_ROWS = 6;
+const LABEL_COLS = 3;
+const LABEL_ROWS = 7;
 function renderBatchQrPrint(){
   const ids = [...qrSelected];
   if(!ids.length){ alert('선택된 고객이 없어요. 목록에서 체크박스로 먼저 선택해주세요.'); return; }
@@ -1260,7 +1266,7 @@ function renderBatchQrPrint(){
     cell.className = 'label-cell';
     cell.innerHTML = `<div class="label-name">${c.name}</div><div class="label-qrbox" id="lqr-${c.id}"></div>`;
     sheet.appendChild(cell);
-    new QRCode(document.getElementById('lqr-'+c.id), {text: c.id, width:70, height:70, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
+    new QRCode(document.getElementById('lqr-'+c.id), {text: c.id, width:200, height:200, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
   });
 }
 
