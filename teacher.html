@@ -466,6 +466,20 @@ function cleanDateStr(v){
   if(y2 < 1900 || y2 > 2100) return '';
   return d.toISOString().slice(0,10);
 }
+function cleanPhoneStr(v){
+  if(v===undefined || v===null || v==='') return '';
+  let digits;
+  if(typeof v === 'number'){
+    digits = String(Math.trunc(v));
+    if(!digits.startsWith('0')) digits = '0'+digits;
+  } else {
+    digits = String(v).replace(/\D/g,'');
+    if(digits && !digits.startsWith('0')) digits = '0'+digits;
+  }
+  if(digits.length===11 && digits.startsWith('01')) return digits.slice(0,3)+'-'+digits.slice(3,7)+'-'+digits.slice(7);
+  if(digits.length===10 && digits.startsWith('01')) return digits.slice(0,3)+'-'+digits.slice(3,6)+'-'+digits.slice(6);
+  return digits || String(v).trim();
+}
 async function fetchCustomersFromSheet(){
   const res = await fetch(SHEET_API_URL + '?action=list');
   const data = await res.json();
@@ -475,6 +489,8 @@ async function fetchCustomersFromSheet(){
     const visits = (c.visits || []).map(v=>({...v, date: cleanDateStr(v.date)})).filter(v=>v.date);
     return {
       ...c,
+      name: String(c.name || '').trim(),
+      phone: cleanPhoneStr(c.phone),
       birth: cleanDateStr(c.birth),
       threeManStart: cleanDateStr(c.threeManStart),
       fiveManDate: cleanDateStr(c.fiveManDate),

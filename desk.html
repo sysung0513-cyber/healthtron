@@ -428,6 +428,22 @@ function cleanDateStr(v){
   if(y2 < 1900 || y2 > 2100) return ''; // 연도가 비정상적이면 거부
   return d.toISOString().slice(0,10);
 }
+// 전화번호를 항상 문자열로, 가능하면 010-XXXX-XXXX 형식으로 통일.
+// 구글시트가 전화번호를 숫자 타입으로 돌려줘도(예: 1097264790) 절대 죽지 않도록 방어.
+function cleanPhoneStr(v){
+  if(v===undefined || v===null || v==='') return '';
+  let digits;
+  if(typeof v === 'number'){
+    digits = String(Math.trunc(v));
+    if(!digits.startsWith('0')) digits = '0'+digits;
+  } else {
+    digits = String(v).replace(/\D/g,'');
+    if(digits && !digits.startsWith('0')) digits = '0'+digits;
+  }
+  if(digits.length===11 && digits.startsWith('01')) return digits.slice(0,3)+'-'+digits.slice(3,7)+'-'+digits.slice(7);
+  if(digits.length===10 && digits.startsWith('01')) return digits.slice(0,3)+'-'+digits.slice(3,6)+'-'+digits.slice(6);
+  return digits || String(v).trim();
+}
 async function fetchCustomersFromSheet(){
   const res = await fetch(SHEET_API_URL + '?action=list');
   const data = await res.json();
@@ -438,6 +454,8 @@ async function fetchCustomersFromSheet(){
     const visits = (c.visits || []).map(v=>({...v, date: cleanDateStr(v.date)})).filter(v=>v.date);
     return {
       ...c,
+      name: String(c.name || '').trim(),
+      phone: cleanPhoneStr(c.phone),
       birth: cleanDateStr(c.birth),
       threeManStart: cleanDateStr(c.threeManStart),
       fiveManDate: cleanDateStr(c.fiveManDate),
@@ -481,6 +499,7 @@ async function silentRefresh(){
   try{
     customers = await fetchCustomersFromSheet();
   }catch(err){ return; } // 실패하면 다음 주기에 조용히 재시도
+  setStatus(true, `✅ 구글시트 연동됨 · 20초마다 자동 새로고침 (고객 ${customers.length}명)`);
   render();
   checkElectrodeCouponAlerts();
   Object.keys(preserve).forEach(id=>{
