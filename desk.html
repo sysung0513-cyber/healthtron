@@ -730,13 +730,21 @@ function renderCheckin(){
   if(scanEl) scanEl.focus();
 }
 function setSession(s){ checkinSession = s; renderCheckin(); }
+// 스캐너가 QR 종류를 나타내는 보이지 않는 접두어(예: "]Q1")를 값 앞에 붙이는 경우가 있어서,
+// 우리 id 형식(c로 시작하는 영문+숫자)만 뽑아내서 매칭 시도. 앞뒤에 이상한 문자가 섞여있어도 방어됨.
+function extractCustomerId(raw){
+  const s = String(raw||'').trim();
+  const m = s.match(/c[a-z0-9]{8,}/i);
+  return m ? m[0] : s;
+}
 function handleScanInput(e){
   if(e.key !== 'Enter') return;
-  const val = e.target.value.trim();
+  const raw = e.target.value;
   e.target.value = '';
+  const val = extractCustomerId(raw);
   if(!val) return;
   const c = customers.find(x=>x.id===val);
-  if(!c){ showToast('등록되지 않은 QR이에요'); return; }
+  if(!c){ showToast(`등록되지 않은 QR이에요 (스캔값: ${raw.trim()})`); return; }
   doCheckin(c.id);
 }
 // Enter 키를 안 보내는 스캐너 대응: 입력이 잠깐(150ms) 멈추면 자동으로 체크인 시도.
@@ -746,7 +754,8 @@ function handleScanInputDebounced(e){
   const el = e.target;
   clearTimeout(window._scanDebounceTimer);
   window._scanDebounceTimer = setTimeout(()=>{
-    const val = el.value.trim();
+    const raw = el.value;
+    const val = extractCustomerId(raw);
     if(!val) return;
     const c = customers.find(x=>x.id===val);
     if(!c) return; // 사람이 직접 타이핑 중일 수도 있으니, 못 찾았다고 바로 에러 띄우지 않음
