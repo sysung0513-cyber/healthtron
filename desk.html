@@ -1137,7 +1137,7 @@ try{
       ${isViewer() ? '' : `<button class="btn btn-primary" onclick="this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'))">정보 수정</button>`}
     </div>`;
   document.body.appendChild(wrap);
-  new QRCode(document.getElementById('detailQrBox'), {text: c.id, width:120, height:120, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
+  new QRCode(document.getElementById('detailQrBox'), {text: c.id, width:160, height:160, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
 }catch(err){
   console.error('openCustomerDetail 에러:', err);
   showToast('⚠️ 이 고객 정보를 불러오는 중 문제가 생겼어요. 데이터를 확인해주세요.');
@@ -1197,7 +1197,7 @@ function showQr(id){
     </div>
     <div style="text-align:center; margin-top:16px;"><button class="btn btn-amber" onclick="window.print()">🖨 이 사람만 인쇄하기</button></div>
   `;
-  new QRCode(document.getElementById('qrbox'), {text: c.id, width:150, height:150, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
+  new QRCode(document.getElementById('qrbox'), {text: c.id, width:220, height:220, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
 }
 
 /* ---------------- 일괄 QR 인쇄 (라벨지용) ----------------
