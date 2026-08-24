@@ -1535,17 +1535,24 @@ async function handleExcelImport(e){
       const ok = confirm(`신규 등록 ${toCreate.length}명, 기존 고객 업데이트 ${toUpdate.length}명입니다.${skipped.length?` (이름/전화번호 없는 ${skipped.length}개 행은 건너뜀)`:''}\n계속할까요?`);
       if(!ok) return;
 
-      showToast(`처리 중... (${toCreate.length+toUpdate.length}명)`);
-      for(const c of toCreate){
-        customers.push(c);
-        await syncCustomer(c);
-      }
-      for(const c of toUpdate){
+      showToast(`저장 중... (${toCreate.length+toUpdate.length}명, 잠시만 기다려주세요)`);
+      toCreate.forEach(c=> customers.push(c));
+      toUpdate.forEach(c=>{
         const idx = customers.findIndex(x=>x.id===c.id);
         if(idx!==-1) customers[idx] = c;
-        await syncCustomer(c);
+      });
+      try{
+        const res = await fetch(SHEET_API_URL, {
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body: JSON.stringify({action:'batchUpsert', customers:[...toCreate, ...toUpdate]})
+        });
+        const result = await res.json();
+        if(!result.ok) throw new Error(result.error || '알 수 없는 오류');
+        showToast(`✅ 완료! 신규 ${toCreate.length}명 · 업데이트 ${toUpdate.length}명`);
+      }catch(saveErr){
+        alert('구글시트 저장 중 문제가 생겼어요. 인터넷 연결을 확인하고 다시 시도해주세요.\n(' + saveErr.message + ')');
       }
-      showToast(`✅ 완료! 신규 ${toCreate.length}명 · 업데이트 ${toUpdate.length}명`);
       renderCustomerList();
     }catch(err){
       alert('엑셀 파일을 읽는 중 문제가 생겼어요. 양식이 맞는지 확인해주세요.\n(' + err.message + ')');
