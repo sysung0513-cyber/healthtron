@@ -497,6 +497,8 @@ function startAutoRefresh(){
 async function silentRefresh(){
   if(!sheetConfigured()) return;
   if(document.querySelector('.modal-bg')) return; // 등록/수정 중이면 방해하지 않음
+  if(window._isPrintingQr) return; // QR 일괄 생성/인쇄 중이면 방해하지 않음
+  if(qrSelected && qrSelected.size>0 && document.getElementById('batchQrSheet')) return; // 인쇄 화면 보고있는 중이면 유지
   const preserve = {};
   ['checkinSearch','custSearch','qrSearch'].forEach(id=>{
     const el = document.getElementById(id);
@@ -1253,21 +1255,43 @@ const LABEL_ROWS = 7;
 function renderBatchQrPrint(){
   const ids = [...qrSelected];
   if(!ids.length){ alert('선택된 고객이 없어요. 목록에서 체크박스로 먼저 선택해주세요.'); return; }
+  if(ids.length > 100){
+    const ok = confirm(`${ids.length}명을 한번에 인쇄합니다. 라벨지 ${Math.ceil(ids.length/(LABEL_COLS*LABEL_ROWS))}장 분량이고, QR을 그리는 데 시간이 좀 걸릴 수 있어요.\n계속할까요?`);
+    if(!ok) return;
+  }
   const list = ids.map(id=>customers.find(c=>c.id===id)).filter(Boolean);
+  window._isPrintingQr = true; // 이 동안은 자동새로고침이 화면을 건드리지 않게 함
   const box = document.getElementById('qrDisplay');
   box.innerHTML = `
-    <div class="sub" style="margin:10px 2px;">총 ${list.length}명 선택됨 · 라벨지 ${LABEL_COLS}×${LABEL_ROWS}(${LABEL_COLS*LABEL_ROWS}칸) 기준 배치</div>
+    <div class="sub" style="margin:10px 2px;">총 ${list.length}명 선택됨 · 라벨지 ${LABEL_COLS}×${LABEL_ROWS}(${LABEL_COLS*LABEL_ROWS}칸) 기준 배치 · <span id="qrGenProgress">QR 생성 중... 0/${list.length}</span></div>
     <div id="batchQrSheet" class="label-sheet"></div>
-    <div style="text-align:center; margin:16px 0 40px;"><button class="btn btn-amber" onclick="window.print()">🖨 전체 인쇄하기</button></div>
+    <div style="text-align:center; margin:16px 0 40px;"><button class="btn btn-amber" id="batchPrintBtn" onclick="window.print()" disabled>🖨 전체 인쇄하기 (생성 중...)</button></div>
   `;
   const sheet = document.getElementById('batchQrSheet');
-  list.forEach(c=>{
-    const cell = document.createElement('div');
-    cell.className = 'label-cell';
-    cell.innerHTML = `<div class="label-name">${c.name}</div><div class="label-qrbox" id="lqr-${c.id}"></div>`;
-    sheet.appendChild(cell);
-    new QRCode(document.getElementById('lqr-'+c.id), {text: c.id, width:200, height:200, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
-  });
+  const progressEl = document.getElementById('qrGenProgress');
+  const printBtn = document.getElementById('batchPrintBtn');
+  const CHUNK = 20; // 한 번에 20명씩만 그리고, 브라우저가 숨 쉴 시간을 줌(화면 멈춤 방지)
+  let i = 0;
+  function drawChunk(){
+    const end = Math.min(i + CHUNK, list.length);
+    for(; i < end; i++){
+      const c = list[i];
+      const cell = document.createElement('div');
+      cell.className = 'label-cell';
+      cell.innerHTML = `<div class="label-name">${c.name}</div><div class="label-qrbox" id="lqr-${c.id}"></div>`;
+      sheet.appendChild(cell);
+      new QRCode(document.getElementById('lqr-'+c.id), {text: c.id, width:200, height:200, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
+    }
+    if(progressEl) progressEl.textContent = `QR 생성 중... ${i}/${list.length}`;
+    if(i < list.length){
+      setTimeout(drawChunk, 0); // 다음 덩어리는 살짝 뒤에 그려서 화면이 멈추지 않게 함
+    } else {
+      if(progressEl) progressEl.textContent = `QR ${list.length}개 생성 완료`;
+      if(printBtn){ printBtn.disabled = false; printBtn.textContent = '🖨 전체 인쇄하기'; }
+      window._isPrintingQr = false;
+    }
+  }
+  drawChunk();
 }
 
 /* ---------------- 통계 (월별/연도별) ---------------- */
