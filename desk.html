@@ -90,7 +90,7 @@
     grid-template-columns: repeat(3, 63.5mm);
     grid-auto-rows: 38.1mm;
     gap: 0mm;
-    padding: 15.15mm 9.75mm;
+    padding: 30.15mm 9.75mm 0mm 9.75mm; /* 실제 인쇄 테스트 결과 아래로 15mm 밀려야 정확히 맞음(2026-08 조정) */
     width: 210mm; /* A4 폭 */
     margin: 0 auto;
     box-sizing: border-box;
@@ -1222,6 +1222,7 @@ function renderQrList(){
   const q = (document.getElementById('qrSearch')?.value || '').trim();
   const box = document.getElementById('qrList');
   let list = q ? customers.filter(c=>c.name.includes(q)) : customers;
+  list = [...list].sort((a,b)=>a.name.localeCompare(b.name, 'ko'));
   const countEl = document.getElementById('qrSelCount');
   if(countEl) countEl.textContent = qrSelected.size;
   if(!list.length){ box.innerHTML = '<div class="empty">고객을 검색해서 QR카드를 만들어보세요</div>'; return; }
@@ -1259,7 +1260,7 @@ function renderBatchQrPrint(){
     const ok = confirm(`${ids.length}명을 한번에 인쇄합니다. 라벨지 ${Math.ceil(ids.length/(LABEL_COLS*LABEL_ROWS))}장 분량이고, QR을 그리는 데 시간이 좀 걸릴 수 있어요.\n계속할까요?`);
     if(!ok) return;
   }
-  const list = ids.map(id=>customers.find(c=>c.id===id)).filter(Boolean);
+  const list = ids.map(id=>customers.find(c=>c.id===id)).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name, 'ko'));
   window._isPrintingQr = true; // 이 동안은 자동새로고침이 화면을 건드리지 않게 함
   const box = document.getElementById('qrDisplay');
   box.innerHTML = `
