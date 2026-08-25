@@ -82,18 +82,26 @@
   .qr-card .cid{font-size:11px; color:var(--muted); letter-spacing:1px;}
 
   /* ---- 폼텍 라벨지 일괄 인쇄 ----
-     실제 라벨지 제품에 맞추려면 아래 grid-template-columns 칸수와
-     .label-cell의 크기, .label-sheet의 gap/padding만 조정하면 됩니다.
-     ※ 현재값: 폼텍 V3330 (63.5×38.1mm, 3열×7행=21칸, A4 기준) */
-  .label-sheet{
-    display:grid;
-    grid-template-columns: repeat(3, 63.5mm);
-    grid-auto-rows: 38.1mm;
-    gap: 0mm;
-    padding: 30.15mm 9.75mm 0mm 9.75mm; /* 실제 인쇄 테스트 결과 아래로 15mm 밀려야 정확히 맞음(2026-08 조정) */
-    width: 210mm; /* A4 폭 */
-    margin: 0 auto;
+     ※ 현재값: 폼텍 V3330 (63×38mm, 3열×7행=21칸, A4 기준)
+     ※ 2026-08 재구성: 예전엔 그리드 하나가 여러 페이지에 걸쳐 이어지다 보니
+       "padding"이 맨 처음 한 번만 적용돼서 2페이지부터 여백이 달라지는 문제가 있었음.
+       이제 21칸씩 "페이지" 단위(.label-page, A4 크기 고정)로 미리 나눠서, 모든 페이지가
+       똑같은 여백을 갖도록 만듦. */
+  .label-page{
+    width: 210mm; height: 297mm; /* A4 크기 고정 */
+    padding: 15.5mm 10.5mm; /* 상하 15.5mm / 좌우 10.5mm — 63x38mm x 7줄이 정확히 A4에 맞는 계산값 */
     box-sizing: border-box;
+    page-break-after: always;
+    break-after: page;
+  }
+  .label-page:last-child{ page-break-after: auto; break-after: auto; }
+  .label-grid{
+    display:grid;
+    grid-template-columns: repeat(3, 63mm);
+    grid-auto-rows: 38mm;
+    gap: 0mm;
+    width: 100%;
+    height: 100%;
   }
   .label-cell{
     border: 1px dashed #ddd; /* 화면 확인용 안내선(인쇄시 자동 숨김) */
@@ -105,11 +113,13 @@
     overflow: hidden;
   }
   .label-name{ font-size:9px; font-weight:700; color:var(--teal); margin-bottom:1mm; }
+  .label-phone{ font-size:7px; color:var(--muted); margin-top:1mm; letter-spacing:0.3px; }
   .label-qrbox{ display:flex; justify-content:center; }
-  .label-qrbox canvas, .label-qrbox img{ width:24mm !important; height:24mm !important; }
+  .label-qrbox canvas, .label-qrbox img{ width:19.2mm !important; height:19.2mm !important; }
   @media print{
     @page{ size:A4; margin:0; }
-    header, .tabbar, .searchbar, #qrList, .status-banner, .sub { display:none !important; }
+    header, .tabbar, .searchbar, #qrList, .status-banner, .sub,
+    #qrPageTitle, #qrControlsRow, #qrPrintControls { display:none !important; }
     .label-cell{ border-color: transparent; }
     body{ padding:0; }
     main{ padding:0; max-width:none; }
@@ -498,7 +508,7 @@ async function silentRefresh(){
   if(!sheetConfigured()) return;
   if(document.querySelector('.modal-bg')) return; // 등록/수정 중이면 방해하지 않음
   if(window._isPrintingQr) return; // QR 일괄 생성/인쇄 중이면 방해하지 않음
-  if(qrSelected && qrSelected.size>0 && document.getElementById('batchQrSheet')) return; // 인쇄 화면 보고있는 중이면 유지
+  if(qrSelected && qrSelected.size>0 && document.getElementById('batchQrPages')) return; // 인쇄 화면 보고있는 중이면 유지
   const preserve = {};
   ['checkinSearch','custSearch','qrSearch'].forEach(id=>{
     const el = document.getElementById(id);
@@ -1195,10 +1205,11 @@ let qrSelected = new Set();
 function renderQrPicker(){
   qrSelected = new Set();
   document.getElementById('main').innerHTML = `
-    <h2 class="section-title">QR카드 발급 (일반·VIP 공통)</h2>
+    <h2 class="section-title" id="qrPageTitle">QR카드 발급 (일반·VIP 공통)</h2>
     <div class="searchbar"><input type="text" id="qrSearch" placeholder="이름 검색" oninput="renderQrList()"></div>
-    <div class="row" style="padding:6px 2px;">
+    <div class="row" id="qrControlsRow" style="padding:6px 2px; flex-wrap:wrap; gap:8px;">
       <button class="btn btn-ghost" onclick="toggleSelectAllQr()">전체선택/해제</button>
+      <button class="btn btn-primary" id="batchPrintBtn" onclick="window.print()" style="display:none;">🖨 전체 인쇄하기</button>
       <button class="btn btn-amber" onclick="renderBatchQrPrint()">🖨 선택 <span id="qrSelCount">0</span>명 QR 일괄 인쇄</button>
     </div>
     <div id="qrList"></div>
@@ -1253,41 +1264,67 @@ function showQr(id){
    기본값은 A4에 4열×6행(24칸) 일반적인 규격 기준입니다. */
 const LABEL_COLS = 3;
 const LABEL_ROWS = 7;
+const LABEL_PER_PAGE = LABEL_COLS * LABEL_ROWS; // 21칸
 function renderBatchQrPrint(){
   const ids = [...qrSelected];
   if(!ids.length){ alert('선택된 고객이 없어요. 목록에서 체크박스로 먼저 선택해주세요.'); return; }
   if(ids.length > 100){
-    const ok = confirm(`${ids.length}명을 한번에 인쇄합니다. 라벨지 ${Math.ceil(ids.length/(LABEL_COLS*LABEL_ROWS))}장 분량이고, QR을 그리는 데 시간이 좀 걸릴 수 있어요.\n계속할까요?`);
+    const ok = confirm(`${ids.length}명을 한번에 인쇄합니다. 라벨지 ${Math.ceil(ids.length/LABEL_PER_PAGE)}장 분량이고, QR을 그리는 데 시간이 좀 걸릴 수 있어요.\n계속할까요?`);
     if(!ok) return;
   }
   const list = ids.map(id=>customers.find(c=>c.id===id)).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name, 'ko'));
   window._isPrintingQr = true; // 이 동안은 자동새로고침이 화면을 건드리지 않게 함
   const box = document.getElementById('qrDisplay');
+  const printBtn = document.getElementById('batchPrintBtn'); // 상단 고정 버튼 사용
+  const pageCount = Math.ceil(list.length / LABEL_PER_PAGE);
+  if(printBtn){
+    printBtn.style.display = 'inline-block';
+    printBtn.disabled = true;
+    printBtn.textContent = '🖨 전체 인쇄하기 (생성 중...)';
+  }
   box.innerHTML = `
-    <div class="sub" style="margin:10px 2px;">총 ${list.length}명 선택됨 · 라벨지 ${LABEL_COLS}×${LABEL_ROWS}(${LABEL_COLS*LABEL_ROWS}칸) 기준 배치 · <span id="qrGenProgress">QR 생성 중... 0/${list.length}</span></div>
-    <div id="batchQrSheet" class="label-sheet"></div>
-    <div style="text-align:center; margin:16px 0 40px;"><button class="btn btn-amber" id="batchPrintBtn" onclick="window.print()" disabled>🖨 전체 인쇄하기 (생성 중...)</button></div>
+    <div class="sub" id="qrPrintControls" style="text-align:center; margin:6px 0 16px;">
+      총 ${list.length}명 선택됨 · 라벨지 ${pageCount}장 (${LABEL_COLS}×${LABEL_ROWS}=${LABEL_PER_PAGE}칸씩) · <span id="qrGenProgress">QR 생성 중... 0/${list.length}</span>
+    </div>
+    <div id="batchQrPages"></div>
   `;
-  const sheet = document.getElementById('batchQrSheet');
+  const pagesBox = document.getElementById('batchQrPages');
   const progressEl = document.getElementById('qrGenProgress');
-  const printBtn = document.getElementById('batchPrintBtn');
   const CHUNK = 20; // 한 번에 20명씩만 그리고, 브라우저가 숨 쉴 시간을 줌(화면 멈춤 방지)
   let i = 0;
+  // 21명이 채워진 페이지마다 새로운 .label-page/.label-grid를 만들어서
+  // 모든 페이지가 정확히 똑같은 여백(padding)을 갖도록 함
+  function getGridForIndex(idx){
+    const pageIdx = Math.floor(idx / LABEL_PER_PAGE);
+    let grid = document.getElementById('lqrPage-'+pageIdx);
+    if(!grid){
+      const page = document.createElement('div');
+      page.className = 'label-page';
+      page.id = 'lqrPageWrap-'+pageIdx;
+      grid = document.createElement('div');
+      grid.className = 'label-grid';
+      grid.id = 'lqrPage-'+pageIdx;
+      page.appendChild(grid);
+      pagesBox.appendChild(page);
+    }
+    return grid;
+  }
   function drawChunk(){
     const end = Math.min(i + CHUNK, list.length);
     for(; i < end; i++){
       const c = list[i];
+      const grid = getGridForIndex(i);
       const cell = document.createElement('div');
       cell.className = 'label-cell';
-      cell.innerHTML = `<div class="label-name">${c.name}</div><div class="label-qrbox" id="lqr-${c.id}"></div>`;
-      sheet.appendChild(cell);
+      cell.innerHTML = `<div class="label-name">${c.name}</div><div class="label-qrbox" id="lqr-${c.id}"></div><div class="label-phone">${cleanPhoneStr(c.phone)}</div>`;
+      grid.appendChild(cell);
       new QRCode(document.getElementById('lqr-'+c.id), {text: c.id, width:200, height:200, colorDark: c.purchased ? "#7A4EA8" : "#1F4B43", colorLight:"#ffffff"});
     }
     if(progressEl) progressEl.textContent = `QR 생성 중... ${i}/${list.length}`;
     if(i < list.length){
       setTimeout(drawChunk, 0); // 다음 덩어리는 살짝 뒤에 그려서 화면이 멈추지 않게 함
     } else {
-      if(progressEl) progressEl.textContent = `QR ${list.length}개 생성 완료`;
+      if(progressEl) progressEl.textContent = `QR ${list.length}개 생성 완료 (총 ${pageCount}장)`;
       if(printBtn){ printBtn.disabled = false; printBtn.textContent = '🖨 전체 인쇄하기'; }
       window._isPrintingQr = false;
     }
