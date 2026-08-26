@@ -505,6 +505,8 @@ async function loadFromSheet(){
   startAutoRefresh();
   checkElectrodeCouponAlerts();
   scheduleGlobalScanRefocus();
+  autoSetSessionByTime();
+  setInterval(autoSetSessionByTime, 60000); // 1분마다 시간 확인해서 13:30 되면 자동으로 오후 전환
 }
 function startAutoRefresh(){
   if(!sheetConfigured()) return;
@@ -777,7 +779,37 @@ function renderCheckin(){
   const scanEl = document.getElementById('scanInput');
   if(scanEl) scanEl.focus();
 }
-function setSession(s){ checkinSession = s; renderCheckin(); }
+function setSession(s){ checkinSession = s; sessionManuallySet = true; renderCheckin(); }
+
+/* ---------------- 오전/오후 자동 전환 (인터넷 시간 기준, 13:30부터 오후) ----------------
+   PC 시계가 틀어져 있을 수 있어서, 인터넷 시간 서버로 실제 시각을 확인해서 판단함.
+   인터넷 시간을 못 가져오면(오프라인 등) PC 시계(한국 시간 기준)로 대체함. */
+let sessionManuallySet = false; // 사람이 직접 오전/오후 버튼을 눌렀으면, 그날은 자동전환이 되돌리지 않음
+async function getKoreaTimeParts(){
+  try{
+    const res = await fetch('https://worldtimeapi.org/api/timezone/Asia/Seoul');
+    const data = await res.json();
+    const d = new Date(data.datetime); // 서버가 알려준 정확한 현재 시각
+    return { hour:d.getHours(), minute:d.getMinutes(), dateStr:data.datetime.slice(0,10) };
+  }catch(err){
+    // 인터넷 시간 서버 접속 실패 시, PC 시계를 한국 시간 기준으로 계산해서 대체 사용
+    const parts = new Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul', hour12:false, hour:'2-digit', minute:'2-digit', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
+    const get = t => parts.find(p=>p.type===t)?.value;
+    return { hour: parseInt(get('hour')), minute: parseInt(get('minute')), dateStr: `${get('year')}-${get('month')}-${get('day')}` };
+  }
+}
+async function autoSetSessionByTime(){
+  const { hour, minute, dateStr } = await getKoreaTimeParts();
+  // 날짜가 바뀌면(자정 넘어가면) 그날의 수동 설정 여부를 초기화
+  if(window._lastAutoCheckDate !== dateStr){ window._lastAutoCheckDate = dateStr; sessionManuallySet = false; }
+  if(sessionManuallySet) return; // 오늘 이미 사람이 직접 눌러뒀으면 자동전환이 건드리지 않음
+  const shouldBePm = (hour > 13) || (hour === 13 && minute >= 30);
+  const target = shouldBePm ? '오후' : '오전';
+  if(checkinSession !== target){
+    checkinSession = target;
+    if(currentTab==='checkin') renderCheckin();
+  }
+}
 // 스캐너가 QR 종류를 나타내는 보이지 않는 접두어(예: "]Q1")를 값 앞에 붙이는 경우가 있어서,
 // 우리 id 형식(c로 시작하는 영문+숫자)만 뽑아내서 매칭 시도. 앞뒤에 이상한 문자가 섞여있어도 방어됨.
 // ---- 한/영 모드가 잘못되어 한글로 깨진 스캔값을 원래 영문 키입력으로 복원 ----
