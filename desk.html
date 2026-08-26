@@ -967,7 +967,7 @@ function renderCheckinLog(){
   const box = document.getElementById('checkinLog');
   if(!box) return; // 출석체크 탭이 아니면(요소가 없으면) 아무것도 안 함
   const todays = customers.flatMap(c=>c.visits.filter(v=>v.date===todayStr() && v.session===checkinSession).map(v=>({...v,cust:c})));
-  todays.sort((a,b)=> (a.time||'').localeCompare(b.time||'')); // 체크인한 시간 순서대로 (오래된 순 -> 최근)
+  todays.sort((a,b)=> (b.time||'').localeCompare(a.time||'')); // 최근에 체크인한 사람이 맨 위로
   box.innerHTML = todays.length ? todays.map(v=>{
     const c = v.cust;
     const total = (c.calciumPurchases||[]).length;
