@@ -149,6 +149,11 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- 어느 탭에 있든 QR 스캔이 바로 되도록, 항상 존재하는 보이지 않는 입력창. -->
+<input type="text" id="globalScanInput" autocomplete="off"
+  style="position:fixed; top:-100px; left:-100px; width:1px; height:1px; opacity:0; padding:0; border:0;"
+  onkeydown="handleScanInput(event)" oninput="handleScanInputDebounced(event)">
+
 <script>
 /* =========================================================
    0. 구글시트 연동 설정 — 배포한 웹앱 URL을 여기에 붙여넣으세요
@@ -245,7 +250,12 @@ function showElectrodeCouponAlert(c, seg){
   document.body.appendChild(wrap);
 }
 function uid(){ return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+function todayStr(){
+  if(window._verifiedTodayStr) return window._verifiedTodayStr;
+  const parts = new Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
+  const get = t => parts.find(p=>p.type===t)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
 function daysDiff(fromStr, toStr){
   const a = new Date(fromStr+'T00:00:00');
   const b = new Date(toStr+'T00:00:00');
@@ -518,6 +528,9 @@ async function loadFromSheet(){
   startAutoRefresh();
   checkCouponAlerts();
   checkElectrodeCouponAlerts();
+  scheduleGlobalScanRefocus();
+  autoSetSessionByTime();
+  setInterval(autoSetSessionByTime, 60000); // 1분마다 시간 확인해서 13:30 되면 자동으로 오후 전환
 }
 function startAutoRefresh(){
   if(!sheetConfigured()) return;
@@ -575,11 +588,31 @@ async function deleteFromSheet(id){
 
 /* ---------------- 탭 전환 ---------------- */
 document.querySelectorAll('.tabbtn').forEach(b=>{
-  b.addEventListener('click', ()=>{ currentTab=b.dataset.tab; render(); });
+  b.addEventListener('click', ()=>{ currentTab=b.dataset.tab; render(); scheduleGlobalScanRefocus(); });
 });
 if(isViewer()){
   document.querySelectorAll('.tabbtn[data-tab="checkin"], .tabbtn[data-tab="qr"]').forEach(b=> b.style.display='none');
 }
+
+/* ---------------- 전역 QR 스캔 자동 포커스 관리 ---------------- */
+function isEditableFocused(){
+  const el = document.activeElement;
+  if(!el) return false;
+  const tag = el.tagName;
+  if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return true;
+  if(el.isContentEditable) return true;
+  return false;
+}
+function maybeRefocusScan(){
+  if(document.querySelector('.modal-bg')) return; // 등록/수정 폼이 열려있으면 방해하지 않음
+  if(isEditableFocused()) return; // 사람이 지금 다른 입력창을 쓰고 있으면 방해하지 않음
+  refocusScan();
+}
+function scheduleGlobalScanRefocus(){ setTimeout(maybeRefocusScan, 50); }
+document.addEventListener('click', scheduleGlobalScanRefocus);
+document.addEventListener('focusout', scheduleGlobalScanRefocus);
+window.addEventListener('focus', scheduleGlobalScanRefocus);
+
 function render(){
   document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   if(currentTab==='home') renderHome();
@@ -689,7 +722,7 @@ function renderCheckin(){
     </div>
     <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
       <h3>📷 QR 스캐너로 체크인 (일반·VIP 공통)</h3>
-      <input type="text" id="scanInput" placeholder="여기를 탭한 뒤 스캐너로 QR을 스캔하세요" autocomplete="off" onkeydown="handleScanInput(event)">
+      <input type="text" id="scanInput" placeholder="여기를 탭한 뒤 스캐너로 QR을 스캔하세요" autocomplete="off" onkeydown="handleScanInput(event)" oninput="handleScanInputDebounced(event)">
       <div style="font-size:12px; color:var(--muted); margin-top:8px;">스캐너가 QR을 읽으면 자동으로 출석 처리돼요. 화면을 조작한 뒤에는 이 입력창을 한 번 다시 탭해주세요.</div>
     </div>
     <div class="searchbar"><input type="text" id="checkinSearch" placeholder="QR이 없으면 이름/전화번호로 직접 검색" oninput="renderCheckinResults()"></div>
@@ -701,19 +734,100 @@ function renderCheckin(){
   const scanEl = document.getElementById('scanInput');
   if(scanEl) scanEl.focus();
 }
-function setSession(s){ checkinSession = s; renderCheckin(); }
+function setSession(s){ checkinSession = s; sessionManuallySet = true; renderCheckin(); }
+
+/* ---------------- 오전/오후 자동 전환 (인터넷 시간 기준, 13:30부터 오후) ---------------- */
+let sessionManuallySet = false;
+async function getKoreaTimeParts(){
+  try{
+    const res = await fetch('https://worldtimeapi.org/api/timezone/Asia/Seoul');
+    const data = await res.json();
+    const d = new Date(data.datetime);
+    return { hour:d.getHours(), minute:d.getMinutes(), dateStr:data.datetime.slice(0,10) };
+  }catch(err){
+    const parts = new Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul', hour12:false, hour:'2-digit', minute:'2-digit', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
+    const get = t => parts.find(p=>p.type===t)?.value;
+    return { hour: parseInt(get('hour')), minute: parseInt(get('minute')), dateStr: `${get('year')}-${get('month')}-${get('day')}` };
+  }
+}
+async function autoSetSessionByTime(){
+  const { hour, minute, dateStr } = await getKoreaTimeParts();
+  const prevDate = window._verifiedTodayStr;
+  window._verifiedTodayStr = dateStr;
+  if(window._lastAutoCheckDate !== dateStr){ window._lastAutoCheckDate = dateStr; sessionManuallySet = false; }
+  if(prevDate !== dateStr){ render(); }
+  if(sessionManuallySet) return;
+  const shouldBePm = (hour > 13) || (hour === 13 && minute >= 30);
+  const target = shouldBePm ? '오후' : '오전';
+  if(checkinSession !== target){
+    checkinSession = target;
+    if(currentTab==='checkin') renderCheckin();
+  }
+}
+
+// 스캐너가 QR 종류를 나타내는 보이지 않는 접두어(예: "]Q1")를 값 앞에 붙이는 경우가 있어서,
+// 우리 id 형식(c로 시작하는 영문+숫자)만 뽑아내서 매칭 시도. 앞뒤에 이상한 문자가 섞여있어도 방어됨.
+// ---- 한/영 모드가 잘못되어 한글로 깨진 스캔값을 원래 영문 키입력으로 복원 ----
+const HG_INITIAL = ['r','R','s','e','E','f','a','q','Q','t','T','d','w','W','c','z','x','v','g'];
+const HG_MEDIAL  = ['k','o','i','O','j','p','u','P','h','hk','ho','hl','y','n','nj','np','nl','b','m','ml','l'];
+const HG_FINAL   = ['','r','R','rt','s','sw','sg','e','f','fr','fa','fq','ft','fx','fv','fg','a','q','qt','t','T','d','w','c','z','x','v','g'];
+const HG_LONE_CONSONANT = ['r','R','rt','s','sw','sg','e','E','f','fr','fa','fq','ft','fx','fv','fg','a','q','Q','qt','t','T','d','w','W','c','z','x','v','g'];
+const HG_LONE_VOWEL = ['k','o','i','O','j','p','u','P','h','hk','ho','hl','y','n','nj','np','nl','b','m','ml','l'];
+function hangulToQwerty(str){
+  let out = '';
+  for(const ch of String(str||'')){
+    const code = ch.codePointAt(0);
+    if(code>=0xAC00 && code<=0xD7A3){
+      const s = code - 0xAC00;
+      const l = Math.floor(s/(21*28)), v = Math.floor((s%(21*28))/28), t = s%28;
+      out += (HG_INITIAL[l]||'') + (HG_MEDIAL[v]||'') + (HG_FINAL[t]||'');
+    } else if(code>=0x3131 && code<=0x314E){
+      out += HG_LONE_CONSONANT[code-0x3131] || ch;
+    } else if(code>=0x314F && code<=0x3163){
+      out += HG_LONE_VOWEL[code-0x314F] || ch;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+function extractCustomerId(raw){
+  const s = String(raw||'').trim();
+  let m = s.match(/c[a-z0-9]{8,}/i);
+  if(m) return m[0];
+  const converted = hangulToQwerty(s);
+  m = converted.match(/c[a-z0-9]{8,}/i);
+  return m ? m[0] : s;
+}
 function handleScanInput(e){
   if(e.key !== 'Enter') return;
-  const val = e.target.value.trim();
+  const raw = e.target.value;
   e.target.value = '';
+  const val = extractCustomerId(raw);
   if(!val) return;
   const c = customers.find(x=>x.id===val);
-  if(!c){ showToast('등록되지 않은 QR이에요'); return; }
+  if(!c){ showToast(`등록되지 않은 QR이에요 (스캔값: ${raw.trim()})`); return; }
   doCheckin(c.id);
+}
+// Enter 키를 안 보내는 스캐너 대응: 입력이 잠깐(150ms) 멈추면 자동으로 체크인 시도.
+window._scanDebounceTimer = null;
+function handleScanInputDebounced(e){
+  const el = e.target;
+  clearTimeout(window._scanDebounceTimer);
+  window._scanDebounceTimer = setTimeout(()=>{
+    const raw = el.value;
+    const val = extractCustomerId(raw);
+    if(!val) return;
+    const c = customers.find(x=>x.id===val);
+    if(!c) return;
+    el.value = '';
+    doCheckin(c.id);
+  }, 150);
 }
 function renderCheckinResults(){
   const q = (document.getElementById('checkinSearch')?.value || '').trim();
   const box = document.getElementById('checkinResults');
+  if(!box) return; // 출석체크 탭이 아니면(요소가 없으면) 아무것도 안 함
   if(!q){ box.innerHTML=''; return; }
   const results = customers.filter(c => c.name.includes(q) || c.phone.replace(/-/g,'').includes(q));
   if(!results.length){ box.innerHTML = '<div class="empty">검색 결과가 없어요. 고객관리 탭에서 새로 등록해주세요.</div>'; return; }
@@ -732,6 +846,15 @@ function doCheckin(id){
   const today = todayStr();
   const already = c.visits.some(v=>v.date===today && v.session===checkinSession);
   if(already){ showToast(`${c.name}님은 이미 ${checkinSession} 출석 완료`); refocusScan(); return; }
+
+  // 하루 한 번 출석 원칙: 다른 세션(오전/오후)에 이미 출석했으면 체크인 자체를 막음
+  const otherSession = checkinSession==='오전' ? '오후' : '오전';
+  const alreadyOtherSession = c.visits.some(v=>v.date===today && v.session===otherSession);
+  if(alreadyOtherSession){
+    showToast(`⚠️ ${c.name}님은 오늘 ${otherSession}에 이미 출석했어요. 하루 1회만 출석 가능해요.`);
+    refocusScan();
+    return;
+  }
 
   // 체크인 전, 직전 방문일과의 간격을 먼저 확인 (7일 이상 결석 후 복귀 감지)
   const priorVisits = c.visits.filter(v=>v.date<today);
@@ -790,10 +913,15 @@ function showReturnAlert(c, gap, lastDate){
   `;
   document.body.appendChild(wrap);
 }
-function refocusScan(){ const el = document.getElementById('scanInput'); if(el) el.focus(); }
+function refocusScan(){
+  const el = document.getElementById('scanInput') || document.getElementById('globalScanInput');
+  if(el) el.focus();
+}
 function renderCheckinLog(){
   const box = document.getElementById('checkinLog');
+  if(!box) return; // 출석체크 탭이 아니면(요소가 없으면) 아무것도 안 함
   const todays = customers.flatMap(c=>c.visits.filter(v=>v.date===todayStr() && v.session===checkinSession).map(v=>({...v,cust:c})));
+  todays.sort((a,b)=> (b.time||'').localeCompare(a.time||'')); // 최근에 체크인한 사람이 맨 위로
   box.innerHTML = todays.length ? todays.map(v=>`<div class="row"><span class="name">${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''}</span><span class="sub">${v.time||''}</span></div>`).join('') : '<div class="empty">아직 체크한 고객이 없어요</div>';
 }
 
