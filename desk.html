@@ -192,6 +192,12 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- 어느 탭에 있든 QR 스캔이 바로 되도록, 항상 존재하는 보이지 않는 입력창.
+     사람이 다른 입력창(검색창, 등록폼 등)을 쓰고 있지 않을 때 자동으로 여기에 포커스가 가 있음. -->
+<input type="text" id="globalScanInput" autocomplete="off"
+  style="position:fixed; top:-100px; left:-100px; width:1px; height:1px; opacity:0; padding:0; border:0;"
+  onkeydown="handleScanInput(event)" oninput="handleScanInputDebounced(event)">
+
 <script>
 /* =========================================================
    0. 구글시트 연동 설정 — 배포한 웹앱 URL을 여기에 붙여넣으세요
@@ -498,6 +504,7 @@ async function loadFromSheet(){
   render();
   startAutoRefresh();
   checkElectrodeCouponAlerts();
+  scheduleGlobalScanRefocus();
 }
 function startAutoRefresh(){
   if(!sheetConfigured()) return;
@@ -508,7 +515,7 @@ async function silentRefresh(){
   if(!sheetConfigured()) return;
   if(document.querySelector('.modal-bg')) return; // 등록/수정 중이면 방해하지 않음
   if(window._isPrintingQr) return; // QR 일괄 생성/인쇄 중이면 방해하지 않음
-  if(qrSelected && qrSelected.size>0 && document.getElementById('batchQrPages')) return; // 인쇄 화면 보고있는 중이면 유지
+  if(currentTab==='qr' && qrSelected && qrSelected.size>0) return; // QR 선택/인쇄 중이면 방해하지 않음(선택 목록 초기화 방지)
   const preserve = {};
   ['checkinSearch','custSearch','qrSearch'].forEach(id=>{
     const el = document.getElementById(id);
@@ -557,11 +564,34 @@ async function deleteFromSheet(id){
 
 /* ---------------- 탭 전환 ---------------- */
 document.querySelectorAll('.tabbtn').forEach(b=>{
-  b.addEventListener('click', ()=>{ currentTab=b.dataset.tab; render(); });
+  b.addEventListener('click', ()=>{ currentTab=b.dataset.tab; render(); scheduleGlobalScanRefocus(); });
 });
 if(isViewer()){
   document.querySelectorAll('.tabbtn[data-tab="checkin"], .tabbtn[data-tab="qr"]').forEach(b=> b.style.display='none');
 }
+
+/* ---------------- 전역 QR 스캔 자동 포커스 관리 ----------------
+   어느 탭에 있든, 사람이 다른 입력창(검색창/등록폼 등)을 직접 쓰고 있는 게 아니면
+   자동으로 스캔 대기 상태(보이지 않는 입력창에 포커스)를 유지해서,
+   탭을 안 옮겨도 QR 스캔만 하면 바로 출석 처리되게 함. */
+function isEditableFocused(){
+  const el = document.activeElement;
+  if(!el) return false;
+  const tag = el.tagName;
+  if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return true;
+  if(el.isContentEditable) return true;
+  return false;
+}
+function maybeRefocusScan(){
+  if(document.querySelector('.modal-bg')) return; // 등록/수정 폼이 열려있으면 방해하지 않음
+  if(isEditableFocused()) return; // 사람이 지금 다른 입력창을 쓰고 있으면 방해하지 않음
+  refocusScan();
+}
+function scheduleGlobalScanRefocus(){ setTimeout(maybeRefocusScan, 50); }
+document.addEventListener('click', scheduleGlobalScanRefocus);
+document.addEventListener('focusout', scheduleGlobalScanRefocus);
+window.addEventListener('focus', scheduleGlobalScanRefocus); // 다른 창 갔다가 돌아왔을 때도
+
 function render(){
   document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   if(currentTab==='home') renderHome();
@@ -813,6 +843,7 @@ function handleScanInputDebounced(e){
 function renderCheckinResults(){
   const q = (document.getElementById('checkinSearch')?.value || '').trim();
   const box = document.getElementById('checkinResults');
+  if(!box) return; // 출석체크 탭이 아니면(요소가 없으면) 아무것도 안 함
   if(!q){ box.innerHTML=''; return; }
   const results = customers.filter(c => c.name.includes(q) || c.phone.replace(/-/g,'').includes(q));
   if(!results.length){ box.innerHTML = '<div class="empty">검색 결과가 없어요. 고객관리 탭에서 새로 등록해주세요.</div>'; return; }
@@ -927,9 +958,14 @@ function showReturnAlert(c, gap, lastDate){
   `;
   document.body.appendChild(wrap);
 }
-function refocusScan(){ const el = document.getElementById('scanInput'); if(el) el.focus(); }
+function refocusScan(){
+  // 출석체크 탭이면 눈에 보이는 입력창에, 아니면 전역(숨김) 입력창에 포커스
+  const el = document.getElementById('scanInput') || document.getElementById('globalScanInput');
+  if(el) el.focus();
+}
 function renderCheckinLog(){
   const box = document.getElementById('checkinLog');
+  if(!box) return; // 출석체크 탭이 아니면(요소가 없으면) 아무것도 안 함
   const todays = customers.flatMap(c=>c.visits.filter(v=>v.date===todayStr() && v.session===checkinSession).map(v=>({...v,cust:c})));
   box.innerHTML = todays.length ? todays.map(v=>{
     const c = v.cust;
