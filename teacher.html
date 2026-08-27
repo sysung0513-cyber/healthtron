@@ -807,7 +807,7 @@ function handleScanInput(e){
   if(!val) return;
   const c = customers.find(x=>x.id===val);
   if(!c){ showToast(`등록되지 않은 QR이에요 (스캔값: ${raw.trim()})`); return; }
-  doCheckin(c.id);
+  doCheckin(c.id, true);
 }
 // Enter 키를 안 보내는 스캐너 대응: 입력이 잠깐(150ms) 멈추면 자동으로 체크인 시도.
 window._scanDebounceTimer = null;
@@ -821,7 +821,7 @@ function handleScanInputDebounced(e){
     const c = customers.find(x=>x.id===val);
     if(!c) return;
     el.value = '';
-    doCheckin(c.id);
+    doCheckin(c.id, true);
   }, 150);
 }
 function renderCheckinResults(){
@@ -839,20 +839,20 @@ function renderCheckinResults(){
     </div>`;
   }).join('');
 }
-function doCheckin(id){
+function doCheckin(id, fromScanner){
   if(isViewer()){ showToast('열람 전용 모드에서는 체크인할 수 없어요'); return; }
   const c = customers.find(x=>x.id===id);
   if(!c) return;
   const today = todayStr();
   const already = c.visits.some(v=>v.date===today && v.session===checkinSession);
-  if(already){ showToast(`${c.name}님은 이미 ${checkinSession} 출석 완료`); refocusScan(); return; }
+  if(already){ showToast(`${c.name}님은 이미 ${checkinSession} 출석 완료`); if(fromScanner) refocusScan(); return; }
 
   // 하루 한 번 출석 원칙: 다른 세션(오전/오후)에 이미 출석했으면 체크인 자체를 막음
   const otherSession = checkinSession==='오전' ? '오후' : '오전';
   const alreadyOtherSession = c.visits.some(v=>v.date===today && v.session===otherSession);
   if(alreadyOtherSession){
     showToast(`⚠️ ${c.name}님은 오늘 ${otherSession}에 이미 출석했어요. 하루 1회만 출석 가능해요.`);
-    refocusScan();
+    if(fromScanner) refocusScan();
     return;
   }
 
@@ -871,7 +871,7 @@ function doCheckin(id){
   if(s) s.value='';
   renderCheckinResults();
   renderCheckinLog();
-  refocusScan();
+  if(fromScanner) refocusScan(); // 손으로 탭한 경우엔 재포커스 안 함(폰에서 가상키보드 뜨는 것 방지)
 
   if(returnGap!==null && returnGap>=7){
     showReturnAlert(c, returnGap, lastPriorDate);
