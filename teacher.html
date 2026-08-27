@@ -1365,7 +1365,7 @@ function renderTimelineBody(){
     if(!groups[label]) groups[label] = [];
     groups[label].push(v);
   });
-  const labels = Object.keys(groups).sort((a,b)=>timeSlotSortKey(a)-timeSlotSortKey(b));
+  const labels = Object.keys(groups).sort((a,b)=>timeSlotSortKey(b)-timeSlotSortKey(a)); // 최신 시간대가 위로
 
   box.innerHTML = `
     <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
