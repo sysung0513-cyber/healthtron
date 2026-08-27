@@ -604,6 +604,7 @@ function isEditableFocused(){
   return false;
 }
 function maybeRefocusScan(){
+  if(currentTab!=='checkin') return; // 출석체크 탭이 아니면(예: 시간대별 탭 확인 버튼) 절대 포커스 안 줌 - 폰에서 가상키보드 뜨는 문제 방지
   if(document.querySelector('.modal-bg')) return; // 등록/수정 폼이 열려있으면 방해하지 않음
   if(isEditableFocused()) return; // 사람이 지금 다른 입력창을 쓰고 있으면 방해하지 않음
   refocusScan();
@@ -1374,7 +1375,7 @@ function renderTimelineBody(){
       `).join('') : '<div class="empty">오늘 쿠폰 대상자가 없어요</div>'}
     </div>
   ` + labels.map(label=>{
-    const list = groups[label].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    const list = groups[label].sort((a,b)=>(b.time||'').localeCompare(a.time||'')); // 최근에 출석한 사람이 위로
     const confirmedCount = list.filter(v=>v.confirmed).length;
     return `<div class="slot-card">
       <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${confirmedCount}/${list.length}명 확인</span></div>
