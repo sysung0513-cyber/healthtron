@@ -850,8 +850,9 @@ function scanCodeToChar(code){
   if(m) return m[1].toLowerCase();
   m = code.match(/^Digit([0-9])$/);
   if(m) return m[1];
-  m = code.match(/^Numpad([0-9])$/);
-  if(m) return m[1];
+  // 주의: Numpad(키패드) 숫자는 일부러 인식하지 않음.
+  // 일부 스캐너 기기가 숫자 하나에 대해 "일반 숫자키"와 "키패드 숫자키" 신호를
+  // 동시에 두 번 보내는 경우가 있어서, 여기서 Numpad 쪽을 무시해 중복 입력을 원천 차단함.
   return null;
 }
 function finalizeScan(el){
@@ -875,7 +876,15 @@ function handleScanInput(e){
   const ch = scanCodeToChar(e.code);
   if(ch){
     e.preventDefault(); // 한/영 조합(IME)이 끼어들지 않도록 기본 동작 막고, 물리 키값만 직접 사용
-    e.target._scanBuffer = (e.target._scanBuffer||'') + ch;
+    // 일부 스캐너는 숫자키 신호를 짧은 순간(수 ms) 안에 두 번씩 보내는 경우가 있어서,
+    // 같은 키가 15ms 이내에 연속으로 눌리면 기기 오류로 보고 한 번만 반영함
+    const now = Date.now();
+    const isEcho = e.target._lastScanCode === e.code && (now - (e.target._lastScanTime||0)) < 15;
+    e.target._lastScanCode = e.code;
+    e.target._lastScanTime = now;
+    if(!isEcho){
+      e.target._scanBuffer = (e.target._scanBuffer||'') + ch;
+    }
     clearTimeout(e.target._scanTimer);
     // 입력이 잠깐(150ms) 멈추면 Enter 없이도 자동으로 체크인 시도 (스캐너가 Enter를 안 보내는 경우 대응)
     e.target._scanTimer = setTimeout(()=>finalizeScan(e.target), 150);
