@@ -198,7 +198,7 @@
      사람이 다른 입력창(검색창, 등록폼 등)을 쓰고 있지 않을 때 자동으로 여기에 포커스가 가 있음. -->
 <input type="text" id="globalScanInput" autocomplete="off"
   style="position:fixed; top:-100px; left:-100px; width:1px; height:1px; opacity:0; padding:0; border:0;"
-  onkeydown="handleScanInput(event)" oninput="handleScanInputDebounced(event)">
+  onkeydown="handleScanInput(event)">
 
 <script>
 /* =========================================================
@@ -795,7 +795,7 @@ function renderCheckin(){
     </div>
     <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
       <h3>📷 QR 스캐너로 체크인 (일반·VIP 공통)</h3>
-      <input type="text" id="scanInput" placeholder="여기를 탭한 뒤 스캐너로 QR을 스캔하세요" autocomplete="off" onkeydown="handleScanInput(event)" oninput="handleScanInputDebounced(event)">
+      <input type="text" id="scanInput" placeholder="여기를 탭한 뒤 스캐너로 QR을 스캔하세요" autocomplete="off" onkeydown="handleScanInput(event)">
       <div style="font-size:12px; color:var(--muted); margin-top:8px;">스캐너가 QR을 읽으면 자동으로 출석 처리돼요. 화면을 조작한 뒤에는 이 입력창을 한 번 다시 탭해주세요.</div>
     </div>
     <div class="searchbar"><input type="text" id="checkinSearch" placeholder="QR이 없으면 이름/전화번호로 직접 검색" oninput="renderCheckinResults()"></div>
@@ -841,67 +841,45 @@ async function autoSetSessionByTime(){
     if(currentTab==='checkin') renderCheckin();
   }
 }
-// 스캐너가 QR 종류를 나타내는 보이지 않는 접두어(예: "]Q1")를 값 앞에 붙이는 경우가 있어서,
-// 우리 id 형식(c로 시작하는 영문+숫자)만 뽑아내서 매칭 시도. 앞뒤에 이상한 문자가 섞여있어도 방어됨.
-// ---- 한/영 모드가 잘못되어 한글로 깨진 스캔값을 원래 영문 키입력으로 복원 ----
-// (2벌식 자판 기준. 예: "츠네" -> "cm" 로 복원)
-const HG_INITIAL = ['r','R','s','e','E','f','a','q','Q','t','T','d','w','W','c','z','x','v','g'];
-const HG_MEDIAL  = ['k','o','i','O','j','p','u','P','h','hk','ho','hl','y','n','nj','np','nl','b','m','ml','l'];
-const HG_FINAL   = ['','r','R','rt','s','sw','sg','e','f','fr','fa','fq','ft','fx','fv','fg','a','q','qt','t','T','d','w','c','z','x','v','g'];
-const HG_LONE_CONSONANT = ['r','R','rt','s','sw','sg','e','E','f','fr','fa','fq','ft','fx','fv','fg','a','q','Q','qt','t','T','d','w','W','c','z','x','v','g'];
-const HG_LONE_VOWEL = ['k','o','i','O','j','p','u','P','h','hk','ho','hl','y','n','nj','np','nl','b','m','ml','l'];
-function hangulToQwerty(str){
-  let out = '';
-  for(const ch of String(str||'')){
-    const code = ch.codePointAt(0);
-    if(code>=0xAC00 && code<=0xD7A3){
-      const s = code - 0xAC00;
-      const l = Math.floor(s/(21*28)), v = Math.floor((s%(21*28))/28), t = s%28;
-      out += (HG_INITIAL[l]||'') + (HG_MEDIAL[v]||'') + (HG_FINAL[t]||'');
-    } else if(code>=0x3131 && code<=0x314E){
-      out += HG_LONE_CONSONANT[code-0x3131] || ch;
-    } else if(code>=0x314F && code<=0x3163){
-      out += HG_LONE_VOWEL[code-0x314F] || ch;
-    } else {
-      out += ch;
-    }
-  }
-  return out;
+/* ---------------- QR 스캔 입력 처리 (물리 키 위치 기반) ----------------
+   한/영 모드에 따라 글자가 한글로 깨지는 문제를 근본적으로 없애기 위해,
+   화면에 찍히는 값(한/영에 따라 달라짐)을 읽는 대신, event.code(물리적으로 어떤 키를
+   눌렀는지)를 직접 읽어서 조합함. 이 방식은 한/영 모드가 무엇이든 항상 정확함. */
+function scanCodeToChar(code){
+  let m = code.match(/^Key([A-Z])$/);
+  if(m) return m[1].toLowerCase();
+  m = code.match(/^Digit([0-9])$/);
+  if(m) return m[1];
+  m = code.match(/^Numpad([0-9])$/);
+  if(m) return m[1];
+  return null;
 }
-function extractCustomerId(raw){
-  const s = String(raw||'').trim();
-  let m = s.match(/c[a-z0-9]{8,}/i);
-  if(m) return m[0];
-  // 한글로 깨진 경우, 원래 영문키로 복원해서 다시 시도
-  const converted = hangulToQwerty(s);
-  m = converted.match(/c[a-z0-9]{8,}/i);
-  return m ? m[0] : s;
+function finalizeScan(el){
+  const val = el._scanBuffer || '';
+  el._scanBuffer = '';
+  el.value = '';
+  if(!val) return;
+  const m = val.match(/c[a-z0-9]{8,}/i);
+  const id = m ? m[0] : val;
+  const c = customers.find(x=>x.id===id);
+  if(!c){ showToast(`등록되지 않은 QR이에요 (스캔값: ${val})`); return; }
+  doCheckin(c.id, true);
 }
 function handleScanInput(e){
-  if(e.key !== 'Enter') return;
-  const raw = e.target.value;
-  e.target.value = '';
-  const val = extractCustomerId(raw);
-  if(!val) return;
-  const c = customers.find(x=>x.id===val);
-  if(!c){ showToast(`등록되지 않은 QR이에요 (스캔값: ${raw.trim()})`); return; }
-  doCheckin(c.id);
-}
-// Enter 키를 안 보내는 스캐너 대응: 입력이 잠깐(150ms) 멈추면 자동으로 체크인 시도.
-// 사람이 손으로 타이핑하는 속도보다 훨씬 빠르게 값이 채워지는 스캐너의 특성을 이용.
-window._scanDebounceTimer = null;
-function handleScanInputDebounced(e){
-  const el = e.target;
-  clearTimeout(window._scanDebounceTimer);
-  window._scanDebounceTimer = setTimeout(()=>{
-    const raw = el.value;
-    const val = extractCustomerId(raw);
-    if(!val) return;
-    const c = customers.find(x=>x.id===val);
-    if(!c) return; // 사람이 직접 타이핑 중일 수도 있으니, 못 찾았다고 바로 에러 띄우지 않음
-    el.value = '';
-    doCheckin(c.id);
-  }, 150);
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    clearTimeout(e.target._scanTimer);
+    finalizeScan(e.target);
+    return;
+  }
+  const ch = scanCodeToChar(e.code);
+  if(ch){
+    e.preventDefault(); // 한/영 조합(IME)이 끼어들지 않도록 기본 동작 막고, 물리 키값만 직접 사용
+    e.target._scanBuffer = (e.target._scanBuffer||'') + ch;
+    clearTimeout(e.target._scanTimer);
+    // 입력이 잠깐(150ms) 멈추면 Enter 없이도 자동으로 체크인 시도 (스캐너가 Enter를 안 보내는 경우 대응)
+    e.target._scanTimer = setTimeout(()=>finalizeScan(e.target), 150);
+  }
 }
 function renderCheckinResults(){
   const q = (document.getElementById('checkinSearch')?.value || '').trim();
