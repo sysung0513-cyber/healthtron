@@ -794,6 +794,7 @@ function renderCheckin(){
       <button id="btn-am" class="${checkinSession==='오전'?'sel':''}" onclick="setSession('오전')">☀️ 오전</button>
       <button id="btn-pm" class="${checkinSession==='오후'?'sel':''}" onclick="setSession('오후')">🌤 오후</button>
     </div>
+    <div class="card"><h3>${window._checkinDateOverride || todayStr()} ${checkinSession} 출석자</h3><div id="checkinLog"></div></div>
     <div class="card" style="${overrideActive?'border:2px solid #f5a623; background:#fff8ec;':'border:1px dashed #ccc;'} margin-bottom:10px;">
       <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <span style="font-size:14px; font-weight:700;">📅 체크인 처리 날짜:</span>
@@ -808,7 +809,6 @@ function renderCheckin(){
     </div>
     <div class="searchbar"><input type="text" id="checkinSearch" placeholder="QR이 없으면 이름/전화번호로 직접 검색" oninput="renderCheckinResults()"></div>
     <div id="checkinResults"></div>
-    <div class="card"><h3>${window._checkinDateOverride || todayStr()} ${checkinSession} 출석자</h3><div id="checkinLog"></div></div>
   `;
   renderCheckinResults();
   renderCheckinLog();
