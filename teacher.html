@@ -715,11 +715,19 @@ function renderHome(){
 
 /* ---------------- 출석체크 ---------------- */
 function renderCheckin(){
+  const overrideActive = window._checkinDateOverride && window._checkinDateOverride !== todayStr();
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">출석체크</h2>
     <div class="session-pick">
       <button id="btn-am" class="${checkinSession==='오전'?'sel':''}" onclick="setSession('오전')">☀️ 오전</button>
       <button id="btn-pm" class="${checkinSession==='오후'?'sel':''}" onclick="setSession('오후')">🌤 오후</button>
+    </div>
+    <div class="card" style="${overrideActive?'border:2px solid #f5a623; background:#fff8ec;':'border:1px dashed #ccc;'} margin-bottom:10px;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span style="font-size:14px; font-weight:700;">📅 체크인 처리 날짜:</span>
+        <input type="date" id="checkinDateInput" value="${window._checkinDateOverride || todayStr()}" onchange="setCheckinDateOverride(this.value)">
+        ${overrideActive ? `<span class="badge" style="background:#f5a623; color:#fff;">⚠️ 오늘(${todayStr()})이 아닌 지난 날짜로 기록됩니다</span><button class="btn btn-ghost" onclick="setCheckinDateOverride(null)">오늘로 되돌리기</button>` : ''}
+      </div>
     </div>
     <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
       <h3>📷 QR 스캐너로 체크인 (일반·VIP 공통)</h3>
@@ -728,12 +736,16 @@ function renderCheckin(){
     </div>
     <div class="searchbar"><input type="text" id="checkinSearch" placeholder="QR이 없으면 이름/전화번호로 직접 검색" oninput="renderCheckinResults()"></div>
     <div id="checkinResults"></div>
-    <div class="card"><h3>오늘(${todayStr()}) ${checkinSession} 출석자</h3><div id="checkinLog"></div></div>
+    <div class="card"><h3>${window._checkinDateOverride || todayStr()} ${checkinSession} 출석자</h3><div id="checkinLog"></div></div>
   `;
   renderCheckinResults();
   renderCheckinLog();
   const scanEl = document.getElementById('scanInput');
   if(scanEl) scanEl.focus();
+}
+function setCheckinDateOverride(val){
+  window._checkinDateOverride = (val && val !== todayStr()) ? val : null;
+  renderCheckin();
 }
 function setSession(s){ checkinSession = s; sessionManuallySet = true; renderCheckin(); }
 
@@ -755,7 +767,7 @@ async function autoSetSessionByTime(){
   const { hour, minute, dateStr } = await getKoreaTimeParts();
   const prevDate = window._verifiedTodayStr;
   window._verifiedTodayStr = dateStr;
-  if(window._lastAutoCheckDate !== dateStr){ window._lastAutoCheckDate = dateStr; sessionManuallySet = false; }
+  if(window._lastAutoCheckDate !== dateStr){ window._lastAutoCheckDate = dateStr; sessionManuallySet = false; window._checkinDateOverride = null; }
   if(prevDate !== dateStr){ render(); }
   if(sessionManuallySet) return;
   const shouldBePm = (hour > 13) || (hour === 13 && minute >= 30);
@@ -826,7 +838,7 @@ function doCheckin(id, fromScanner){
   if(isViewer()){ showToast('열람 전용 모드에서는 체크인할 수 없어요'); return; }
   const c = customers.find(x=>x.id===id);
   if(!c) return;
-  const today = todayStr();
+  const today = window._checkinDateOverride || todayStr(); // 지난 날짜 체크인 모드면 그 날짜 사용
   const already = c.visits.some(v=>v.date===today && v.session===checkinSession);
   if(already){ showToast(`${c.name}님은 이미 ${checkinSession} 출석 완료`); if(fromScanner) refocusScan(); return; }
 
@@ -848,7 +860,8 @@ function doCheckin(id, fromScanner){
   }
 
   c.visits.push({date:today, session:checkinSession, time:new Date().toTimeString().slice(0,5)});
-  showToast(`${c.name}님 ${checkinSession} 출석 완료!`);
+  const dateNote = window._checkinDateOverride ? ` (${today} 지난날짜)` : '';
+  showToast(`${c.name}님 ${checkinSession} 출석 완료!${dateNote}`);
   syncCustomer(c);
   const s = document.getElementById('checkinSearch');
   if(s) s.value='';
@@ -903,7 +916,8 @@ function refocusScan(){
 function renderCheckinLog(){
   const box = document.getElementById('checkinLog');
   if(!box) return; // 출석체크 탭이 아니면(요소가 없으면) 아무것도 안 함
-  const todays = customers.flatMap(c=>c.visits.filter(v=>v.date===todayStr() && v.session===checkinSession).map(v=>({...v,cust:c})));
+  const logDate = window._checkinDateOverride || todayStr();
+  const todays = customers.flatMap(c=>c.visits.filter(v=>v.date===logDate && v.session===checkinSession).map(v=>({...v,cust:c})));
   todays.sort((a,b)=> (b.time||'').localeCompare(a.time||'')); // 최근에 체크인한 사람이 맨 위로
   box.innerHTML = todays.length ? todays.map(v=>`<div class="row"><span class="name">${v.cust.name} ${v.cust.purchased?'<span class="badge vip">VIP</span>':''}</span><span class="sub">${v.time||''}</span></div>`).join('') : '<div class="empty">아직 체크한 고객이 없어요</div>';
 }
@@ -1144,18 +1158,58 @@ function showQr(id){
 
 /* ---------------- 통계 (월별/연도별) ---------------- */
 let statMode = 'month';
+let statDay = todayStr();
+let statWeek = null;
 let statMonth = todayStr().slice(0,7);
 let statYear = todayStr().slice(0,4);
+function isoWeekStrOf(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const dow = (d.getDay()+6)%7;
+  d.setDate(d.getDate() - dow + 3);
+  const firstThursday = new Date(d.getFullYear(),0,4);
+  const diff = (d - firstThursday) / 86400000;
+  const week = 1 + Math.round(diff/7);
+  return `${d.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+function weekRangeFromIsoWeek(isoWeekStr){
+  const [y,w] = isoWeekStr.split('-W').map(Number);
+  const simple = new Date(y,0,1+(w-1)*7);
+  const dow = simple.getDay();
+  const start = new Date(simple);
+  if(dow<=4) start.setDate(simple.getDate()-dow+1); else start.setDate(simple.getDate()+8-dow);
+  const end = new Date(start); end.setDate(start.getDate()+6);
+  return {start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10)};
+}
+statWeek = isoWeekStrOf(todayStr());
+function inStatRange(dateStr){
+  if(!dateStr) return false;
+  if(statMode==='day') return dateStr===statDay;
+  if(statMode==='week'){ const r=weekRangeFromIsoWeek(statWeek); return dateStr>=r.start && dateStr<=r.end; }
+  if(statMode==='month') return dateStr.startsWith(statMonth);
+  return dateStr.startsWith(statYear);
+}
+function statRangeLabel(){
+  if(statMode==='day') return statDay;
+  if(statMode==='week'){ const r=weekRangeFromIsoWeek(statWeek); return `${statWeek} (${r.start} ~ ${r.end})`; }
+  if(statMode==='month') return statMonth;
+  return statYear;
+}
 
 function renderStats(){
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">기간별 통계</h2>
     <div class="session-pick">
+      <button class="${statMode==='day'?'sel':''}" onclick="setStatMode('day')">일별</button>
+      <button class="${statMode==='week'?'sel':''}" onclick="setStatMode('week')">주별</button>
       <button class="${statMode==='month'?'sel':''}" onclick="setStatMode('month')">월별</button>
       <button class="${statMode==='year'?'sel':''}" onclick="setStatMode('year')">연도별</button>
     </div>
     <div class="card">
-      ${statMode==='month'
+      ${statMode==='day'
+        ? `<label class="field"><span>조회할 날짜</span><input type="date" id="statDayInput" value="${statDay}" onchange="statDay=this.value; renderStatsBody();"></label>`
+        : statMode==='week'
+        ? `<label class="field"><span>조회할 주</span><input type="week" id="statWeekInput" value="${statWeek}" onchange="statWeek=this.value; renderStatsBody();"></label>`
+        : statMode==='month'
         ? `<label class="field"><span>조회할 월</span><input type="month" id="statMonthInput" value="${statMonth}" onchange="statMonth=this.value; renderStatsBody();"></label>`
         : `<label class="field"><span>조회할 연도</span><input type="number" id="statYearInput" value="${statYear}" min="2020" max="2100" onchange="statYear=this.value; renderStatsBody();"></label>`
       }
@@ -1220,30 +1274,57 @@ function computeRetention(prefix){
   return {w2, w4, w8, absentees};
 }
 function renderStatsBody(){
+  const isDayOrWeek = statMode==='day' || statMode==='week';
   const prefix = statMode==='month' ? statMonth : statYear;
-  const visitsInRange = customers.flatMap(c=>c.visits.filter(v=>v.date.startsWith(prefix)).map(v=>({...v, cust:c})));
+  const visitsInRange = customers.flatMap(c=>c.visits.filter(v=>inStatRange(v.date)).map(v=>({...v, cust:c})));
   const uniqueVisitorIds = new Set(visitsInRange.map(v=>v.cust.id));
-  const newCustomers = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(prefix));
+  const vipVisits = visitsInRange.filter(v=>v.cust.purchased);
+  const trialVisits = visitsInRange.filter(v=>!v.cust.purchased);
+  const uniqueVipIds = new Set(vipVisits.map(v=>v.cust.id));
+  const uniqueTrialIds = new Set(trialVisits.map(v=>v.cust.id));
+  const newCustomers = customers.filter(c=>c.firstVisit && inStatRange(c.firstVisit));
   const referredNew = newCustomers.filter(c=>c.referrer);
-  const purchasedInRange = customers.filter(c=>c.purchased && c.purchaseDate && c.purchaseDate.startsWith(prefix));
+  const purchasedInRange = customers.filter(c=>c.purchased && c.purchaseDate && inStatRange(c.purchaseDate));
   const amCount = visitsInRange.filter(v=>v.session==='오전').length;
   const pmCount = visitsInRange.filter(v=>v.session==='오후').length;
-  const calciumInRange = customers.filter(c=>c.calciumDate && c.calciumDate.startsWith(prefix));
+  const calciumInRange = customers.filter(c=>c.calciumDate && inStatRange(c.calciumDate));
 
   const modelCount = {}; MODELS.forEach(m=>modelCount[m]=0);
   purchasedInRange.forEach(c=>{ if(c.purchaseModel) modelCount[c.purchaseModel] = (modelCount[c.purchaseModel]||0)+1; });
 
-  const ret = computeRetention(prefix);
+  const today = todayStr();
+  const thisMonthPrefix = today.slice(0,7);
+  const lastMonthPrefix = shiftMonth(thisMonthPrefix, -1);
+  function registeredAndVisitedToday(monthPrefix){
+    const cohort = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(monthPrefix));
+    const visitedToday = cohort.filter(c=>c.visits.some(v=>v.date===today));
+    return {cohortSize: cohort.length, visitedToday: visitedToday.length};
+  }
+  const thisMonthToday = registeredAndVisitedToday(thisMonthPrefix);
+  const lastMonthToday = registeredAndVisitedToday(lastMonthPrefix);
+
+  const ret = !isDayOrWeek ? computeRetention(prefix) : null;
   const rateTxt = r => r.total ? `${r.retained}명 / ${r.total}명 (${r.rate}%)` : '해당 기간 경과 고객 없음';
-  const refTiming = computeReferralTiming(prefix);
+  const refTiming = !isDayOrWeek ? computeReferralTiming(prefix) : null;
 
   const box = document.getElementById('statsBody');
   box.innerHTML = `
     <div class="grid4">
       <div class="stat"><div class="n">${visitsInRange.length}</div><div class="l">총 방문 횟수</div></div>
       <div class="stat"><div class="n">${uniqueVisitorIds.size}</div><div class="l">방문한 고객 수(중복제외)</div></div>
-      <div class="stat"><div class="n">${newCustomers.length}</div><div class="l">신규 고객</div></div>
-      <div class="stat vip"><div class="n">${purchasedInRange.length}</div><div class="l">구매 전환(VIP)</div></div>
+      <div class="stat"><div class="n">${uniqueTrialIds.size}</div><div class="l">무료체험 고객</div></div>
+      <div class="stat vip"><div class="n">${uniqueVipIds.size}</div><div class="l">VIP 고객</div></div>
+    </div>
+    <div class="card"><h3>👥 방문객 구성 (${statRangeLabel()})</h3>
+      <div class="row"><span class="sub">총 방문 횟수</span><span>${visitsInRange.length}회</span></div>
+      <div class="row"><span class="sub">무료체험 고객 방문</span><span>${trialVisits.length}회 (${uniqueTrialIds.size}명)</span></div>
+      <div class="row"><span class="sub">VIP 고객 방문</span><span>${vipVisits.length}회 (${uniqueVipIds.size}명)</span></div>
+    </div>
+    <div class="card" style="border:2px solid var(--amber-light);">
+      <h3>🆕 이번 달/지난 달 등록 고객 중 오늘(${today}) 방문</h3>
+      <div class="row"><span class="sub">이번 달(${thisMonthPrefix}) 등록 고객</span><span>${thisMonthToday.visitedToday}명 / ${thisMonthToday.cohortSize}명 방문</span></div>
+      <div class="row"><span class="sub">지난 달(${lastMonthPrefix}) 등록 고객</span><span>${lastMonthToday.visitedToday}명 / ${lastMonthToday.cohortSize}명 방문</span></div>
+      <div class="sub" style="margin-top:8px; font-size:12px; color:var(--muted);">※ 이 카드는 위에서 고르신 기간과 상관없이 항상 "오늘" 기준으로 계산돼요.</div>
     </div>
     <div class="card"><h3>오전 / 오후 방문 비율</h3>
       <div class="row"><span class="sub">오전</span><span>${amCount}회</span></div>
@@ -1252,6 +1333,7 @@ function renderStatsBody(){
     <div class="card"><h3>신규 고객 중 소개로 온 인원</h3>
       <div class="row"><span class="sub">소개 유입</span><span>${referredNew.length}명 / 전체 신규 ${newCustomers.length}명</span></div>
     </div>
+    ${!isDayOrWeek ? `
     <div class="card">
       <h3>🔗 소개 전환 시점 분석</h3>
       ${refTiming.count ? `
@@ -1259,7 +1341,7 @@ function renderStatsBody(){
         ${Object.entries(refTiming.buckets).map(([label,cnt])=>`<div class="row"><span class="sub">${label}</span><span>${cnt}명</span></div>`).join('')}
         <div class="sub" style="margin-top:8px; font-size:12px; color:var(--muted);">※ 소개자 이름이 고객 명단과 일치하는 경우만 집계돼요. 동명이인이 있으면 오차가 있을 수 있어요.</div>
       ` : '<div class="empty">소개자 정보가 매칭되는 사례가 아직 없어요</div>'}
-    </div>
+    </div>` : ''}
     <div class="card"><h3>모델별 구매 현황</h3>
       ${MODELS.map(m=>`<div class="row"><span class="sub">${m}</span><span>${modelCount[m]}대</span></div>`).join('')}
     </div>
@@ -1267,6 +1349,7 @@ function renderStatsBody(){
       <div class="row"><span class="sub">이 기간 칼슘 구매</span><span>${calciumInRange.length}명</span></div>
     </div>
 
+    ${!isDayOrWeek ? `
     <div class="card" style="border:2px solid var(--amber-light);">
       <h3>📈 신규 고객 리텐션 (이 기간 등록자 기준)</h3>
       <div class="row"><span class="sub">2주 이상 출석 (2주차에 주4일↑)</span><span>${rateTxt(ret.w2)}</span></div>
@@ -1280,19 +1363,18 @@ function renderStatsBody(){
       ${ret.absentees.length ? ret.absentees.map(x=>`
         <div class="row"><span class="name">${x.c.name}</span><span class="sub" style="color:#C0392B;">${x.gap}일째 미방문 (마지막 ${x.lv})</span></div>
       `).join('') : '<div class="empty">해당하는 고객이 없어요</div>'}
-    </div>
+    </div>` : ''}
 
     <button class="btn btn-amber btn-block" onclick="exportStatsCsv()">⬇ 이 기간 방문기록 엑셀(CSV)로 내보내기</button>
   `;
 }
 function exportStatsCsv(){
-  const prefix = statMode==='month' ? statMonth : statYear;
-  const visitsInRange = customers.flatMap(c=>c.visits.filter(v=>v.date.startsWith(prefix)).map(v=>({...v, cust:c}))).sort((a,b)=>a.date.localeCompare(b.date));
+  const visitsInRange = customers.flatMap(c=>c.visits.filter(v=>inStatRange(v.date)).map(v=>({...v, cust:c}))).sort((a,b)=>a.date.localeCompare(b.date));
   let csv = '\uFEFF날짜,시간대,고객명,전화번호,소개자,VIP여부\n';
   visitsInRange.forEach(v=>{ csv += `${v.date},${v.session},${v.cust.name},${v.cust.phone},${v.cust.referrer||''},${v.cust.purchased?'VIP':'일반'}\n`; });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `헬스트론_방문기록_${prefix}.csv`; a.click();
+  const a = document.createElement('a'); a.href = url; a.download = `헬스트론_방문기록_${statRangeLabel().replace(/[^0-9A-Za-z가-힣~()-]/g,'_')}.csv`; a.click();
   URL.revokeObjectURL(url);
   showToast('CSV 파일이 다운로드됐어요');
 }
