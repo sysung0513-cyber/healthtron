@@ -432,7 +432,7 @@ function showToast(msg){
 
 // 고객이 직접 확인할 수 있게, 화면 가운데에 크게 뜨는 출석 확인 팝업.
 // 확인 버튼 없이 2초 뒤 자동으로 사라짐(고객이 직접 조작할 필요 없음).
-function showCheckinPopup(name, session){
+function showCheckinPopup(name, session, couponBadge){
   const old = document.getElementById('checkinPopup');
   if(old) old.remove(); // 연속 스캔 시 이전 팝업 정리
   const wrap = document.createElement('div');
@@ -443,6 +443,7 @@ function showCheckinPopup(name, session){
       <div style="font-size:64px; line-height:1;">✅</div>
       <div style="font-size:32px; font-weight:800; color:var(--teal); margin:16px 0 8px;">${name}님</div>
       <div style="font-size:22px; color:var(--muted);">${session} 출석 완료되었습니다</div>
+      ${couponBadge ? `<div style="margin-top:14px; display:inline-block; background:#FFFDF7; border:1px solid var(--amber-light); border-radius:20px; padding:8px 18px; font-size:16px; font-weight:700; color:#8A6D00;">${couponBadge}</div>` : ''}
     </div>
   `;
   document.body.appendChild(wrap);
@@ -936,8 +937,10 @@ function doCheckin(id){
 
   c.visits.push({date:today, session:checkinSession, time:new Date().toTimeString().slice(0,5)});
   const dateNote = window._checkinDateOverride ? ` (${today} 지난날짜)` : '';
+  const streakN = currentStreak(c, today);
+  const couponBadge = isCouponDay(c, today) ? `🎟️ ${streakN}일 연속 출석! (3만볼트 쿠폰 대상)` : '';
   showToast(`${c.name}님 ${checkinSession} 출석 완료!${dateNote}`);
-  showCheckinPopup(c.name, checkinSession + dateNote);
+  showCheckinPopup(c.name, checkinSession + dateNote, couponBadge);
   syncCustomer(c);
   const s = document.getElementById('checkinSearch');
   if(s) s.value='';
@@ -952,9 +955,8 @@ function doCheckin(id){
     const bd = daysUntilBirthday(c.birth, today);
     if(bd===0) showBirthdayAlert(c);
   }
-  if(isCouponDay(c, today)){
-    showCouponAlert(c, currentStreak(c, today));
-  }
+  // 3일연속 쿠폰 알림은 위 출석확인 팝업에 표시만 하고, 확인버튼 필요한 별도 팝업은 안 띄움
+  // (teacher.html의 시간대별 탭에서 강사가 직접 확인 후 지급)
   if(isMilestoneDay(c, today)){
     showMilestoneAlert(c, totalAttendanceDays(c, today));
   }
