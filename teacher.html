@@ -935,7 +935,7 @@ function renderCustomerList(){
 function renderCustomerItems(){
   const q = (document.getElementById('custSearch')?.value || '').trim();
   const box = document.getElementById('custItems');
-  let list = [...customers].sort((a,b)=> (lastVisit(b)||'').localeCompare(lastVisit(a)||''));
+  let list = [...customers].sort((a,b)=> a.name.localeCompare(b.name, 'ko'));
   if(q) list = list.filter(c=>c.name.includes(q) || c.phone.includes(q));
   if(!list.length){ box.innerHTML = '<div class="empty">등록된 고객이 없어요</div>'; return; }
   box.innerHTML = list.map(c=>{
