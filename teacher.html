@@ -1052,11 +1052,9 @@ try{
   const lv = lastVisit(c);
   const refCount = referralCount(c.name);
 
-  // 최근 3개월(이번달 포함) 주단위 출석일수
+  // 이번 달 주단위 출석일수
   const today = todayStr();
-  const monthsToShow = [0,-1,-2]
-    .map(off=>shiftMonth(today.slice(0,7), off))
-    .filter(ym => !c.firstVisit || ym >= c.firstVisit.slice(0,7));
+  const monthsToShow = [today.slice(0,7)];
 
   const wrap = document.createElement('div');
   wrap.className='modal-bg';
@@ -1113,11 +1111,10 @@ try{
         }).join('') || '<div class="empty">출석 기록이 없어요</div>'}
       </div>
       <div class="card">
-        <h3>🗓 출석 날짜 목록 (최근순)</h3>
-        <div style="max-height:260px; overflow-y:auto;">
+        <h3>🗓 최근 출석 날짜 (최근 5일)</h3>
         ${[...c.visits].sort((a,b)=>{ const d = b.date.localeCompare(a.date); return d!==0 ? d : (b.time||'').localeCompare(a.time||''); })
+          .slice(0,5)
           .map(v=>`<div class="row"><span class="sub">${v.date} ${v.session}</span><span>${v.time||''}</span></div>`).join('') || '<div class="empty">출석 기록이 없어요</div>'}
-        </div>
       </div>
       ${c.memo?`<div class="card"><h3>상담 메모</h3><div style="font-size:14px; white-space:pre-wrap;">${c.memo}</div></div>`:''}
       ${isViewer() ? '' : `<button class="btn btn-primary" onclick="this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'))">정보 수정</button>`}
