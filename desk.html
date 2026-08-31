@@ -416,7 +416,10 @@ function addBusinessDays(startStr, totalDays){
   }
   return d.toISOString().slice(0,10);
 }
-function threeManEnd(c){ return addBusinessDays(c.threeManStart || c.firstVisit || todayStr(), 5); }
+function threeManEnd(c){
+  const start = c.firstVisit || todayStr(); // threeManStart는 더 이상 사용하지 않고, 무조건 첫방문일 기준
+  return addBusinessDays(addDaysStr(start, 1), 5); // 등록일 당일은 안 세고, 다음날부터 영업일 5일
+}
 function ddayBadge(endDate){
   const rem = -daysSince(endDate);
   if(rem>0) return {text:`D-${rem}`, cls:'badge'};
