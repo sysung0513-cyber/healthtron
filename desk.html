@@ -605,6 +605,11 @@ function renderHome(){
   const amStat = breakdown(amVisitors);
   const pmStat = breakdown(pmVisitors);
 
+  const yesterday = addDaysStr(today, -1);
+  const newYesterday = customers.filter(c=>c.firstVisit===yesterday);
+  const newToday = customers.filter(c=>c.firstVisit===today);
+  const vipToday = todayVisitors.filter(c=>c.purchased);
+
   const thisMonthReg = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(thisMonthPrefix));
   const thisMonthRegToday = thisMonthReg.filter(c=>c.visits.some(v=>v.date===today)).length;
   const thisMonthRate = thisMonthReg.length ? Math.round(thisMonthRegToday/thisMonthReg.length*1000)/10 : null;
@@ -616,15 +621,6 @@ function renderHome(){
   const calciumToday = customers.filter(c=>(c.calciumPurchases||[]).includes(today));
   const calciumThisMonthCustomers = customers.filter(c=>(c.calciumPurchases||[]).some(d=>d.startsWith(thisMonthPrefix)));
   const calciumThisMonthCount = customers.reduce((sum,c)=>sum+(c.calciumPurchases||[]).filter(d=>d.startsWith(thisMonthPrefix)).length, 0);
-
-  // 소개자별 소개 인원수 (시상 없이 순수 집계: 이번달 + 누적)
-  const thisMonthNewCustomers = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(thisMonthPrefix));
-  const referralCountThisMonth = name => thisMonthNewCustomers.filter(c=>c.referrer && c.referrer.trim()===name.trim()).length;
-  const allReferrerNames = [...new Set(customers.map(c=>c.referrer).filter(Boolean).map(r=>r.trim()))];
-  const referrerSummary = allReferrerNames
-    .map(name=>({name, month:referralCountThisMonth(name), total:referralCount(name)}))
-    .filter(x=>x.total>0)
-    .sort((a,b)=>b.total-a.total);
 
   const statBlock = (title, s) => `
     <div class="card">
@@ -645,37 +641,49 @@ function renderHome(){
     ${statBlock('③ 오후 총 인원', pmStat)}
 
     <div class="card">
-      <h3>④ 이번달 등록 후 오늘 방문</h3>
+      <h3>④ 어제 등록한 신규 고객 (${newYesterday.length}명)</h3>
+      <div class="list-scroll">
+      ${newYesterday.length ? newYesterday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">어제 등록한 신규 고객이 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>⑤ 오늘 등록한 신규 고객 (${newToday.length}명)</h3>
+      <div class="list-scroll">
+      ${newToday.length ? newToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">오늘 등록한 신규 고객이 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>⑥ 오늘 출석한 VIP (${vipToday.length}명)</h3>
+      <div class="list-scroll">
+      ${vipToday.length ? vipToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="badge vip">VIP</span></div>`).join('') : '<div class="empty">오늘 출석한 VIP가 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>⑦ 이번달 등록 후 오늘 방문</h3>
       <div class="row"><span class="sub">이번달 등록인원</span><span>${thisMonthReg.length}명</span></div>
       <div class="row"><span class="sub">오늘 방문</span><span>${thisMonthRegToday}명</span></div>
       <div class="row"><span class="sub">비율</span><span class="badge amber">${thisMonthRate!==null?thisMonthRate+'%':'-'}</span></div>
     </div>
 
     <div class="card">
-      <h3>⑤ 지난달 등록 후 오늘 방문</h3>
+      <h3>⑧ 지난달 등록 후 오늘 방문</h3>
       <div class="row"><span class="sub">지난달 등록인원</span><span>${lastMonthReg.length}명</span></div>
       <div class="row"><span class="sub">오늘 방문</span><span>${lastMonthRegToday}명</span></div>
       <div class="row"><span class="sub">비율</span><span class="badge amber">${lastMonthRate!==null?lastMonthRate+'%':'-'}</span></div>
     </div>
 
     <div class="card">
-      <h3>🔗 소개자별 소개 인원수 (${thisMonthPrefix})</h3>
-      <div class="list-scroll">
-      ${referrerSummary.length ? referrerSummary.map(x=>`
-        <div class="row"><div class="name">${x.name}</div><span class="sub">이달 ${x.month}명 · 누적 ${x.total}명</span></div>
-      `).join('') : '<div class="empty">아직 소개 데이터가 없어요</div>'}
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>💊 ⑧ 오늘 칼슘 구입 고객 (${calciumToday.length}명)</h3>
+      <h3>💊 ⑨ 오늘 칼슘 구입 고객 (${calciumToday.length}명)</h3>
       <div class="list-scroll">
       ${calciumToday.length ? calciumToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">오늘 칼슘 구입 고객이 없어요</div>'}
       </div>
     </div>
 
     <div class="card">
-      <h3>💊 ⑨ 이 달 누적 칼슘 구입 고객수</h3>
+      <h3>💊 ⑩ 이 달 누적 칼슘 구입 고객수</h3>
       <div class="row"><span class="sub">${thisMonthPrefix} 칼슘 구입 고객</span><span class="badge amber">${calciumThisMonthCustomers.length}명 (총 ${calciumThisMonthCount}개)</span></div>
     </div>
     </div>
