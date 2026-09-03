@@ -535,9 +535,8 @@ function renderHome(){
   const amStat = breakdown(amVisitors);
   const pmStat = breakdown(pmVisitors);
 
-  const thisMonthReg = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(thisMonthPrefix));
-  const thisMonthRegToday = thisMonthReg.filter(c=>c.visits.some(v=>v.date===today)).length;
-  const thisMonthRate = thisMonthReg.length ? Math.round(thisMonthRegToday/thisMonthReg.length*1000)/10 : null;
+  const yesterday = addDaysStr(today, -1);
+  const newYesterday = customers.filter(c=>c.firstVisit===yesterday);
 
   // 소개자별 소개 인원수 (시상 없이 순수 집계: 이번달 + 누적)
   const thisMonthNewCustomers = customers.filter(c=>c.firstVisit && c.firstVisit.startsWith(thisMonthPrefix));
@@ -567,10 +566,10 @@ function renderHome(){
     ${statBlock('③ 오후 총 인원', pmStat)}
 
     <div class="card">
-      <h3>④ 이번달 등록 후 오늘 방문</h3>
-      <div class="row"><span class="sub">이번달 등록인원</span><span>${thisMonthReg.length}명</span></div>
-      <div class="row"><span class="sub">오늘 방문</span><span>${thisMonthRegToday}명</span></div>
-      <div class="row"><span class="sub">비율</span><span class="badge amber">${thisMonthRate!==null?thisMonthRate+'%':'-'}</span></div>
+      <h3>④ 어제 등록한 신규 고객 (${newYesterday.length}명)</h3>
+      <div class="list-scroll">
+      ${newYesterday.length ? newYesterday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">어제 등록한 신규 고객이 없어요</div>'}
+      </div>
     </div>
 
     <div class="card">
@@ -1168,11 +1167,6 @@ function renderTimelineBody(){
   const visits = customers.flatMap(c=>c.visits.filter(v=>v.date===timelineDate).map(v=>({...v, cust:c})));
   if(!visits.length){ box.innerHTML = '<div class="empty">이 날짜에 출석한 고객이 없어요</div>'; return; }
 
-  // 이 날짜 방문자 중 3일 연속 출석(3,6,9...) 쿠폰 대상자 요약
-  const couponToday = [...new Map(visits.map(v=>[v.cust.id, v.cust])).values()]
-    .filter(c=>isCouponDay(c, timelineDate))
-    .map(c=>({c, streak:currentStreak(c, timelineDate)}));
-
   const groups = {};
   visits.forEach(v=>{
     const label = timeSlotLabel(v.time);
@@ -1181,14 +1175,7 @@ function renderTimelineBody(){
   });
   const labels = Object.keys(groups).sort((a,b)=>timeSlotSortKey(b)-timeSlotSortKey(a)); // 최신 시간대가 위로
 
-  box.innerHTML = `
-    <div class="card" style="border:2px solid var(--amber-light); background:#FFFDF7;">
-      <h3>🎟️ 오늘 3만볼트 쿠폰 대상자 (${couponToday.length}명)</h3>
-      ${couponToday.length ? couponToday.map(x=>`
-        <div class="row"><span class="name">${x.c.name} ${x.c.purchased?'<span class="badge vip">VIP</span>':''}</span><span class="sub">${x.streak}일 연속</span></div>
-      `).join('') : '<div class="empty">오늘 쿠폰 대상자가 없어요</div>'}
-    </div>
-  ` + labels.map(label=>{
+  box.innerHTML = labels.map(label=>{
     const list = groups[label].sort((a,b)=>(b.time||'').localeCompare(a.time||'')); // 최근에 출석한 사람이 위로
     const confirmedCount = list.filter(v=>v.confirmed).length;
     return `<div class="slot-card">

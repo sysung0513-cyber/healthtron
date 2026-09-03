@@ -937,6 +937,7 @@ function openCustomerForm(existing){
       <div class="modal-title"><h3>${isNew?'신규 고객 등록':'고객 정보 수정'}</h3><button class="close-x" onclick="this.closest('.modal-bg').remove()">✕</button></div>
       <label class="field"><span>이름 *</span><input type="text" id="f-name" value="${c.name}"></label>
       <label class="field"><span>전화번호 *</span><input type="text" id="f-phone" value="${c.phone}" placeholder="010-0000-0000"></label>
+      ${isNew?`<label class="field"><span>등록일 (오늘이 아니면 직접 바꿔주세요)</span><input type="date" id="f-firstvisit" value="${todayStr()}"></label>`:''}
       <label class="field"><span>생년월일</span><input type="date" id="f-birth" value="${c.birth}"></label>
       <label class="field"><span>소개한 사람</span><input type="text" id="f-referrer" value="${c.referrer}"></label>
       <div class="check-field"><input type="checkbox" id="f-purchased" ${c.purchased?'checked':''}><label for="f-purchased">치료기 구매 완료 (VIP 등록)</label></div>
@@ -968,9 +969,11 @@ function saveCustomer(id, isNew){
   let saved;
   if(isNew){
     const base = {healthTag:'', referralBenefitUsed:false, trialDisplay:false, trialStart:'', purchaseDate:'', purchaseModel:'', threeManStart:'', fiveManDate:''};
-    saved = {...base, ...data, firstVisit: todayStr(), visits:[], calciumPurchases:[]};
+    const firstVisitInput = document.getElementById('f-firstvisit');
+    const firstVisit = (firstVisitInput && firstVisitInput.value) ? firstVisitInput.value : todayStr();
+    saved = {...base, ...data, firstVisit, visits:[], calciumPurchases:[]};
     customers.push(saved);
-    showToast(`${name}님 등록 완료`);
+    showToast(`${name}님 등록 완료 (등록일: ${firstVisit})`);
   } else {
     const idx = customers.findIndex(c=>c.id===id);
     saved = {...customers[idx], ...data};
