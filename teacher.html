@@ -814,7 +814,7 @@ function saveCustomer(id, isNew){
   };
   let saved;
   if(isNew){
-    const base = {healthTag:'', referralBenefitUsed:false, trialDisplay:false, trialStart:'', purchaseDate:'', purchaseModel:'', threeManStart:'', fiveManDate:'', calciumPurchases:[]};
+    const base = {healthTag:'', referralBenefitUsed:false, trialDisplay:false, trialStart:'', purchaseDate:'', purchaseModel:'', threeManStart:'', fiveManDate:'', calciumPurchases:[], improvementRatings:{}};
     saved = {...base, ...data, firstVisit: todayStr(), visits:[]};
     customers.push(saved);
     showToast(`${name}님 등록 완료`);
@@ -855,6 +855,17 @@ function weeklyAttendanceForMonth(c, yearMonthStr){
   });
   return Object.keys(buckets).map(Number).sort((a,b)=>a-b).map(b=>({week:b, count:buckets[b].size}));
 }
+function setImprovementRating(id, item, level){
+  if(isViewer()){ showToast('열람 전용 모드에서는 저장할 수 없어요'); return; }
+  const c = customers.find(x=>x.id===id);
+  if(!c) return;
+  if(!c.improvementRatings) c.improvementRatings = {};
+  // 같은 버튼을 다시 누르면 선택 취소, 아니면 그 단계로 설정
+  c.improvementRatings[item] = (c.improvementRatings[item] === level) ? 0 : level;
+  syncCustomer(c);
+  document.querySelectorAll('.modal-bg').forEach(m=>m.remove());
+  openCustomerDetail(id); // 즉시 최신 상태로 다시 열어서 눌린 버튼 색이 바로 반영되게 함
+}
 function openCustomerDetail(id){
 try{
   const c = customers.find(x=>x.id===id);
@@ -892,6 +903,18 @@ try{
           .slice(0,5)
           .map(d=>`<div class="row"><span class="sub">${d}</span></div>`).join('') || '<div class="empty">출석 기록이 없어요</div>'}
       </div>
+      ${c.healthTag?`<div class="card">
+        <h3>🩺 불편한 곳 (호전도 체크)</h3>
+        ${c.healthTag.split(/[.,]/).map(s=>s.trim()).filter(Boolean).map(item=>{
+          const rating = (c.improvementRatings||{})[item] || 0;
+          return `<div class="row"><span class="sub">${item}</span>
+            <span style="display:flex; gap:6px;">
+              ${[1,2,3].map(n=>`<button class="btn-mini" style="background:${rating===n?'#7BAE7F':'#ddd'}; color:${rating===n?'#fff':'#555'}; min-width:28px;" onclick="setImprovementRating('${c.id}','${item.replace(/'/g,"\\'")}',${n})">${n}</button>`).join('')}
+            </span>
+          </div>`;
+        }).join('')}
+        <div class="sub" style="font-size:12px; color:var(--muted); margin-top:8px;">1=조금 좋아짐 · 2=적당히 좋아짐 · 3=아주 좋아짐 (누르면 바로 저장돼요)</div>
+      </div>`:''}
       ${c.memo?`<div class="card"><h3>상담 메모</h3><div style="font-size:14px; white-space:pre-wrap;">${c.memo}</div></div>`:''}
       ${isViewer() ? '' : `<button class="btn btn-primary" onclick="this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'))">정보 수정</button>`}
     </div>`;

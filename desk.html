@@ -968,7 +968,7 @@ function saveCustomer(id, isNew){
   };
   let saved;
   if(isNew){
-    const base = {healthTag:'', referralBenefitUsed:false, trialDisplay:false, trialStart:'', purchaseDate:'', purchaseModel:'', threeManStart:'', fiveManDate:''};
+    const base = {healthTag:'', referralBenefitUsed:false, trialDisplay:false, trialStart:'', purchaseDate:'', purchaseModel:'', threeManStart:'', fiveManDate:'', improvementRatings:{}};
     const firstVisitInput = document.getElementById('f-firstvisit');
     const firstVisit = (firstVisitInput && firstVisitInput.value) ? firstVisitInput.value : todayStr();
     saved = {...base, ...data, firstVisit, visits:[], calciumPurchases:[]};
@@ -1048,7 +1048,10 @@ try{
           .slice(0,5)
           .map(d=>`<div class="row"><span class="sub">${d}</span></div>`).join('') || '<div class="empty">출석 기록이 없어요</div>'}
       </div>
-      ${c.memo?`<div class="card"><h3>상담 메모</h3><div style="font-size:14px; white-space:pre-wrap;">${c.memo}</div></div>`:''}
+      ${(c.memo || c.healthTag)?`<div class="card"><h3>상담 메모</h3>
+        ${c.healthTag?`<div style="font-size:14px; font-weight:600; color:var(--teal); margin-bottom:8px;">🩺 불편한 곳: ${c.healthTag}</div>`:''}
+        ${c.memo?`<div style="font-size:14px; white-space:pre-wrap;">${c.memo}</div>`:''}
+      </div>`:''}
       ${isViewer() ? '' : `<button class="btn btn-primary" onclick="this.closest('.modal-bg').remove(); openCustomerForm(customers.find(x=>x.id==='${c.id}'))">정보 수정</button>`}
     </div>`;
   document.body.appendChild(wrap);
