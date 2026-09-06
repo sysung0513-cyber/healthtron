@@ -856,7 +856,6 @@ function weeklyAttendanceForMonth(c, yearMonthStr){
   return Object.keys(buckets).map(Number).sort((a,b)=>a-b).map(b=>({week:b, count:buckets[b].size}));
 }
 function setImprovementRating(id, item, level){
-  if(isViewer()){ showToast('열람 전용 모드에서는 저장할 수 없어요'); return; }
   const c = customers.find(x=>x.id===id);
   if(!c) return;
   if(!c.improvementRatings) c.improvementRatings = {};
