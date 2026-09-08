@@ -607,6 +607,7 @@ function renderHome(){
 
   const yesterday = addDaysStr(today, -1);
   const newYesterday = customers.filter(c=>c.firstVisit===yesterday);
+  const newYesterdayVisitedToday = newYesterday.filter(c=>c.visits.some(v=>v.date===today));
   const newToday = customers.filter(c=>c.firstVisit===today);
   const vipToday = todayVisitors.filter(c=>c.purchased);
 
@@ -644,6 +645,13 @@ function renderHome(){
       <h3>④ 어제 등록한 신규 고객 (${newYesterday.length}명)</h3>
       <div class="list-scroll">
       ${newYesterday.length ? newYesterday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">어제 등록한 신규 고객이 없어요</div>'}
+      </div>
+    </div>
+
+    <div class="card" style="border:2px solid #DCEBFC; background:#F5FAFF;">
+      <h3>④-1 어제 등록 후 오늘 방문한 고객 (${newYesterdayVisitedToday.length}명)</h3>
+      <div class="list-scroll">
+      ${newYesterdayVisitedToday.length ? newYesterdayVisitedToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">해당하는 고객이 없어요</div>'}
       </div>
     </div>
 
