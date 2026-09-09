@@ -125,6 +125,7 @@
 <body>
 
 <div class="status-banner status-warn" id="statusBanner">⏳ 구글시트 연결 확인 중...</div>
+<div id="syncFailBanner" style="display:none; background:#C0392B; color:#fff; padding:10px 16px; text-align:center; font-size:13px; font-weight:700;"></div>
 <header>
   <div class="stamp">출</div>
   <div><h1>헬스트론 출석관리</h1><div class="sub">강의용</div></div>
@@ -329,16 +330,6 @@ function showToast(msg){
 function sheetConfigured(){
   return SHEET_API_URL && SHEET_API_URL.startsWith('http');
 }
-async function syncCustomer(c){
-  if(!sheetConfigured()) return;
-  try{
-    await fetch(SHEET_API_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({action:'upsert', customer:c})
-    });
-  }catch(err){ showToast('⚠️ 구글시트 저장 실패 (인터넷 확인)'); }
-}
 // 오늘 새로 3일연속(3,6,9...) 쿠폰 대상이 된 고객을 찾아 팝업 알림
 // (같은 고객·같은 날짜에는 한 번만 뜨도록 window._seenCouponAlerts로 기록)
 window._seenCouponAlerts = window._seenCouponAlerts || new Set();
@@ -456,25 +447,63 @@ async function manualRefresh(){
   await silentRefresh();
   showToast('최신 데이터로 갱신됐어요');
 }
-async function syncCustomer(c){
+async function syncCustomer(c, attempt){
+  attempt = attempt || 0;
   if(!sheetConfigured()) return;
   try{
-    await fetch(SHEET_API_URL, {
+    const res = await fetch(SHEET_API_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({action:'upsert', customer:c})
     });
-  }catch(err){ showToast('⚠️ 구글시트 저장 실패 (인터넷 확인)'); }
+    let data = null;
+    try{ data = await res.json(); }catch(e){}
+    if(!res.ok || !data || data.ok !== true){
+      throw new Error('서버가 저장 실패 응답을 보냄');
+    }
+    if(window._syncFailed) window._syncFailed.delete(c.id);
+    updateSyncFailBanner();
+  }catch(err){
+    if(attempt < 2){
+      await new Promise(r=>setTimeout(r, 800));
+      return syncCustomer(c, attempt+1);
+    }
+    if(!window._syncFailed) window._syncFailed = new Map();
+    window._syncFailed.set(c.id, c.name);
+    updateSyncFailBanner();
+    showToast(`⚠️ ${c.name}님 저장 실패! 다시 스캔해주세요`);
+  }
+}
+function updateSyncFailBanner(){
+  const el = document.getElementById('syncFailBanner');
+  if(!el) return;
+  const failed = window._syncFailed;
+  if(!failed || failed.size===0){ el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = `⚠️ 저장 실패한 고객 ${failed.size}명: ${[...failed.values()].join(', ')} — <button class="btn-mini" style="background:#fff; color:#C0392B;" onclick="retryFailedSyncs()">다시 저장 시도</button>`;
+}
+function retryFailedSyncs(){
+  if(!window._syncFailed) return;
+  [...window._syncFailed.keys()].forEach(id=>{
+    const c = customers.find(x=>x.id===id);
+    if(c) syncCustomer(c);
+  });
+  showToast('다시 저장 시도 중...');
 }
 async function deleteFromSheet(id){
   if(!sheetConfigured()) return;
   try{
-    await fetch(SHEET_API_URL, {
+    const res = await fetch(SHEET_API_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({action:'delete', id})
     });
-  }catch(err){ showToast('⚠️ 구글시트 삭제 실패 (인터넷 확인)'); }
+    let data = null;
+    try{ data = await res.json(); }catch(e){}
+    if(!res.ok || !data || data.ok !== true){
+      throw new Error('서버가 삭제 실패 응답을 보냄');
+    }
+  }catch(err){ showToast('⚠️ 구글시트 삭제 실패! 다시 시도해주세요'); }
 }
 
 /* ---------------- 탭 전환 ---------------- */
@@ -659,7 +688,17 @@ function finalizeScan(el){
   if(!val) return;
   const m = val.match(/c[a-z0-9]{8,}/i);
   const id = m ? m[0] : val;
-  const c = customers.find(x=>x.id===id);
+  let c = customers.find(x=>x.id===id);
+  if(!c){
+    const candidates = new Set();
+    for(let i=1;i<id.length;i++){
+      if(id[i]===id[i-1]) candidates.add(id.slice(0,i)+id.slice(i+1));
+    }
+    const matches = [...candidates].map(cand=>customers.find(x=>x.id===cand)).filter(Boolean);
+    if(matches.length===1){
+      c = matches[0];
+    }
+  }
   if(!c){ showToast(`등록되지 않은 QR이에요 (스캔값: ${val})`); return; }
   doCheckin(c.id, true);
 }
