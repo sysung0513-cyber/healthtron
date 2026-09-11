@@ -425,6 +425,7 @@ function renderMissionCard(){
     </div>
   `;
 }
+async function loadMonthData(user){
   try{
     const ym = todayStr.slice(0,7);
     const res = await fetch(`${SHEET_API_URL}?action=getMonthData&phone=${encodeURIComponent(user.phone)}&yearMonth=${ym}`);
