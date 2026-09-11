@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>헬스트론 칼슘·물 케어</title>
+<style>
+  :root{
+    --bg:#F5FAF8;
+    --card:#FFFFFF;
+    --primary:#1B6B63;
+    --primary-dark:#124F49;
+    --accent:#D98E3D;
+    --success:#2F8F7A;
+    --success-bg:#E5F3EF;
+    --text:#24312E;
+    --text-soft:#657873;
+    --border:#DCEAE6;
+    --now-badge:#1B6B63;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    background:var(--bg);
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Pretendard",sans-serif;
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+  }
+  .app{width:100%; max-width:460px; min-height:100vh; display:flex; flex-direction:column;}
+  header{padding:26px 24px 6px; text-align:center;}
+  header .brand{font-size:14px; color:var(--text-soft); margin-bottom:4px;}
+  header h1{font-size:21px; margin:0; color:var(--primary-dark); font-weight:800;}
+  header .date{margin-top:8px; font-size:15px; color:var(--text-soft);}
+
+  main{flex:1; padding:8px 20px 40px;}
+
+  /* 로그인 */
+  .login-card{
+    background:var(--card); border-radius:20px; padding:28px 22px; margin-top:24px;
+    box-shadow:0 2px 10px rgba(27,107,99,0.08);
+  }
+  .login-card p{font-size:17px; line-height:1.6; margin:0 0 22px; font-weight:600;}
+  label{display:block; font-size:15px; color:var(--text-soft); margin:16px 0 8px; font-weight:600;}
+  input[type=text], input[type=tel]{
+    width:100%; font-size:20px; padding:16px 14px; border:2px solid var(--border);
+    border-radius:12px; outline:none; background:#FBFDFC;
+  }
+  input:focus{border-color:var(--primary);}
+  .btn{
+    display:block; width:100%; border:none; border-radius:14px; padding:18px;
+    font-size:19px; font-weight:800; cursor:pointer; margin-top:22px;
+  }
+  .btn-primary{background:var(--primary); color:#fff;}
+  .btn-primary:active{background:var(--primary-dark);}
+
+  /* 요약 */
+  .day-summary{
+    text-align:center; margin:18px 0 6px; font-size:15px; color:var(--text-soft);
+  }
+  .day-summary b{color:var(--primary-dark); font-size:17px;}
+
+  /* 시간대 카드 */
+  .slot-card{
+    background:var(--card); border-radius:18px; padding:20px; margin-bottom:14px;
+    box-shadow:0 2px 8px rgba(27,107,99,0.06); border:2px solid transparent;
+  }
+  .slot-card.is-now{border-color:var(--primary);}
+  .slot-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .slot-title{font-size:18px; font-weight:800;}
+  .now-badge{
+    background:var(--now-badge); color:#fff; font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:10px;
+  }
+  .item-row{display:flex; gap:10px;}
+  .toggle-item{
+    flex:1; padding:16px 8px; border-radius:14px; border:2px solid var(--border);
+    background:#FBFDFC; text-align:center; cursor:pointer; transition:all .12s;
+  }
+  .toggle-item .icon{font-size:26px; display:block; margin-bottom:6px;}
+  .toggle-item .label{font-size:15px; font-weight:700; color:var(--text-soft);}
+  .toggle-item.done{background:var(--success-bg); border-color:var(--success);}
+  .toggle-item.done .label{color:var(--success);}
+
+  footer{text-align:center; padding:10px 0 26px;}
+  footer a{color:var(--text-soft); font-size:13px; text-decoration:underline;}
+  .hidden{display:none !important;}
+
+  .toast{
+    position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--primary-dark); color:#fff; padding:12px 22px; border-radius:20px;
+    font-size:14.5px; font-weight:700; opacity:0; transition:all .25s; pointer-events:none;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">오산 헬스트론</div>
+    <h1>칼슘 · 물 케어</h1>
+    <div class="date" id="todayLabel"></div>
+  </header>
+
+  <main>
+    <div id="loginScreen" class="login-card hidden">
+      <p>처음 오셨네요!<br>성함과 전화번호를 입력해주세요.</p>
+      <label for="nameInput">성함</label>
+      <input type="text" id="nameInput" placeholder="예: 홍길동">
+      <label for="phoneInput">전화번호</label>
+      <input type="tel" id="phoneInput" placeholder="예: 01012345678" inputmode="numeric">
+      <button class="btn btn-primary" id="loginBtn">시작하기</button>
+    </div>
+
+    <div id="mainScreen" class="hidden">
+      <div class="day-summary">오늘 <b id="doneCount">0</b> / 6 완료</div>
+      <div id="slotList"></div>
+    </div>
+  </main>
+
+  <footer>
+    <a href="#" id="changePhoneLink">번호 변경</a>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbx4CVpenDkOEw3tupCnYxgSMeaXDoxUZIYna98VPfyIlHsAKX96cfZd_seEPeu-qIUA/exec";
+
+const SLOTS = [
+  {id:'morning', title:'아침', from:0, to:11},
+  {id:'lunch', title:'점심', from:11, to:17},
+  {id:'dinner', title:'저녁', from:17, to:24}
+];
+const KINDS = [
+  {id:'calcium', label:'칼슘', icon:'💊'},
+  {id:'water', label:'물', icon:'💧'}
+];
+
+function toLocalDateStr(d){
+  d = d || new Date();
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+const todayStr = toLocalDateStr();
+document.getElementById('todayLabel').textContent =
+  new Date().toLocaleDateString('ko-KR', {month:'long', day:'numeric', weekday:'long'});
+
+function currentSlotId(){
+  const h = new Date().getHours();
+  const s = SLOTS.find(s => h >= s.from && h < s.to);
+  return s ? s.id : SLOTS[0].id;
+}
+
+let state = {}; // {morning_calcium:'예'|'', morning_water:'예'|'', ...}
+
+function getUser(){
+  return {
+    phone: localStorage.getItem('cw_phone') || '',
+    name: localStorage.getItem('cw_name') || ''
+  };
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1400);
+}
+
+function fieldKey(slotId, kindId){ return `${slotId}_${kindId}`; }
+
+function renderSlots(){
+  const nowSlot = currentSlotId();
+  const list = document.getElementById('slotList');
+  list.innerHTML = '';
+  SLOTS.forEach(slot=>{
+    const card = document.createElement('div');
+    card.className = 'slot-card' + (slot.id===nowSlot ? ' is-now' : '');
+    card.innerHTML = `
+      <div class="slot-head">
+        <div class="slot-title">${slot.title}</div>
+        ${slot.id===nowSlot ? '<div class="now-badge">지금</div>' : ''}
+      </div>
+      <div class="item-row">
+        ${KINDS.map(k=>{
+          const key = fieldKey(slot.id, k.id);
+          const done = state[key] === '예';
+          return `<div class="toggle-item ${done?'done':''}" data-key="${key}">
+            <span class="icon">${k.icon}</span>
+            <span class="label">${k.label} ${done?'완료':''}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+    list.appendChild(card);
+  });
+  list.querySelectorAll('.toggle-item').forEach(el=>{
+    el.addEventListener('click', ()=>onToggle(el.dataset.key));
+  });
+  updateSummary();
+}
+
+function updateSummary(){
+  const count = Object.values(state).filter(v=>v==='예').length;
+  document.getElementById('doneCount').textContent = count;
+}
+
+async function onToggle(key){
+  state[key] = state[key] === '예' ? '' : '예';
+  renderSlots();
+  showToast(state[key]==='예' ? '저장됐어요 ✔' : '체크 해제됨');
+  await saveState();
+}
+
+async function saveState(){
+  const user = getUser();
+  const payload = {
+    action:'save',
+    phone:user.phone,
+    name:user.name,
+    date:todayStr,
+    ...state
+  };
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify(payload)
+    });
+  }catch(e){ /* 네트워크 오류 시 다음 조작에서 재시도됨 */ }
+}
+
+async function loadToday(user){
+  try{
+    const res = await fetch(`${SHEET_API_URL}?action=getToday&phone=${encodeURIComponent(user.phone)}&date=${todayStr}`);
+    const data = await res.json();
+    state = data.record || {};
+  }catch(e){ state = {}; }
+}
+
+async function init(){
+  const user = getUser();
+  if(!user.phone){
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('mainScreen').classList.add('hidden');
+    return;
+  }
+  await loadToday(user);
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('mainScreen').classList.remove('hidden');
+  renderSlots();
+}
+
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  const name = document.getElementById('nameInput').value.trim();
+  const phone = document.getElementById('phoneInput').value.trim().replace(/[^0-9]/g,'');
+  if(!name){ alert('성함을 입력해주세요.'); return; }
+  if(phone.length < 9){ alert('전화번호를 정확히 입력해주세요.'); return; }
+  localStorage.setItem('cw_phone', phone);
+  localStorage.setItem('cw_name', name);
+  init();
+});
+
+document.getElementById('changePhoneLink').addEventListener('click', (e)=>{
+  e.preventDefault();
+  if(confirm('번호를 변경하시겠어요? 다시 처음부터 입력합니다.')){
+    localStorage.removeItem('cw_phone');
+    localStorage.removeItem('cw_name');
+    location.reload();
+  }
+});
+
+init();
+</script>
+</body>
+</html>
