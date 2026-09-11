@@ -61,6 +61,38 @@
   }
   .day-summary b{color:var(--primary-dark); font-size:17px;}
 
+  /* 오늘의 상태 카드 */
+  .status-card{
+    background:var(--card); border-radius:18px; padding:18px 16px 14px; margin:18px 0 14px;
+    text-align:center; box-shadow:0 2px 8px rgba(27,107,99,0.06);
+  }
+  .status-card .stamp{font-size:22px; font-weight:800; margin-bottom:2px;}
+  .status-card .sub{font-size:12.5px; color:#96a5a1;}
+
+  /* 월간 현황 카드 */
+  .month-card{
+    background:var(--card); border-radius:18px; padding:16px; margin-bottom:14px;
+    box-shadow:0 2px 8px rgba(27,107,99,0.06);
+  }
+  .month-card .month-title{font-size:14px; font-weight:800; margin-bottom:10px;}
+  .tier-chips{display:flex; gap:8px; margin-bottom:14px;}
+  .tier-chip{flex:1; border-radius:10px; padding:10px 4px; text-align:center;}
+  .tier-chip .val{font-size:16px; font-weight:800;}
+  .tier-chip .lab{font-size:10.5px; margin-top:2px;}
+  .tier-chip.t3{background:#E1F5EE;} .tier-chip.t3 .val{color:#085041;} .tier-chip.t3 .lab{color:#0F6E56;}
+  .tier-chip.t2{background:#EFF6F4;} .tier-chip.t2 .val{color:#0F6E56;} .tier-chip.t2 .lab{color:#5DCAA5;}
+  .tier-chip.t1{background:#FAEEDA;} .tier-chip.t1 .val{color:#854F0B;} .tier-chip.t1 .lab{color:#BA7517;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px;}
+  .cal-grid .wd{font-size:10px; color:#96a5a1; text-align:center;}
+  .cal-grid .day{
+    aspect-ratio:1; border-radius:6px; font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; color:var(--text-soft); background:#F2F0E9;
+  }
+  .cal-grid .day.t3{background:#0F6E56; color:#fff;}
+  .cal-grid .day.t2{background:#9FE1CB; color:#0F6E56;}
+  .cal-grid .day.t1{background:#FAEEDA; color:#854F0B;}
+  .cal-grid .day.is-today{border:2px solid var(--primary-dark);}
+
   /* 시간대 카드 */
   .slot-card{
     background:var(--card); border-radius:18px; padding:20px; margin-bottom:14px;
@@ -114,7 +146,8 @@
     </div>
 
     <div id="mainScreen" class="hidden">
-      <div class="day-summary">오늘 <b id="doneCount">0</b> / 6 완료</div>
+      <div id="statusCard" class="status-card"></div>
+      <div id="monthCard" class="month-card"></div>
       <div id="slotList"></div>
     </div>
   </main>
@@ -155,6 +188,21 @@ function currentSlotId(){
 }
 
 let state = {}; // {morning_calcium:'예'|'', morning_water:'예'|'', ...}
+let monthRecords = {}; // {date: record}
+
+const TIER_META = {
+  3:{label:'참 잘했어요', emoji:'🌿', cls:'t3'},
+  2:{label:'잘했어요', emoji:'🙂', cls:'t2'},
+  1:{label:'시작했어요', emoji:'✏️', cls:'t1'},
+  0:{label:'', emoji:'', cls:''}
+};
+
+function tierForRecord(rec){
+  if(!rec) return 0;
+  let count = 0;
+  SLOTS.forEach(s=>{ if(rec[s.id+'_calcium']==='예' && rec[s.id+'_water']==='예') count++; });
+  return count;
+}
 
 function getUser(){
   return {
@@ -200,12 +248,48 @@ function renderSlots(){
   list.querySelectorAll('.toggle-item').forEach(el=>{
     el.addEventListener('click', ()=>onToggle(el.dataset.key));
   });
-  updateSummary();
+  renderStatus();
+  renderMonthCard();
 }
 
-function updateSummary(){
-  const count = Object.values(state).filter(v=>v==='예').length;
-  document.getElementById('doneCount').textContent = count;
+function renderStatus(){
+  const tier = tierForRecord(state);
+  const meta = TIER_META[tier];
+  const totalDone = SLOTS.filter(s => state[s.id+'_calcium']==='예' && state[s.id+'_water']==='예').length;
+  const card = document.getElementById('statusCard');
+  if(tier === 0){
+    card.innerHTML = `<div class="stamp" style="color:var(--text-soft);">오늘 체크를 시작해보세요</div><div class="sub">아래에서 시간대별로 체크할 수 있어요</div>`;
+  }else{
+    card.innerHTML = `<div class="stamp" style="color:#0F6E56;">${meta.label} ${meta.emoji}</div><div class="sub">오늘 ${totalDone} / 3 시간대 완료</div>`;
+  }
+}
+
+function renderMonthCard(){
+  const [y, m] = todayStr.split('-').map(Number);
+  const dCount = new Date(y, m, 0).getDate();
+  const firstWeekday = new Date(y, m-1, 1).getDay();
+  const counts = {3:0, 2:0, 1:0};
+  let cells = '';
+  for(let d=1; d<=dCount; d++){
+    const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const rec = dateStr === todayStr ? state : monthRecords[dateStr];
+    const tier = tierForRecord(rec);
+    if(dateStr <= todayStr && tier > 0) counts[tier]++;
+    const cls = dateStr > todayStr ? '' : (TIER_META[tier].cls || '');
+    const todayCls = dateStr === todayStr ? ' is-today' : '';
+    cells += `<div class="day ${cls}${todayCls}">${d}</div>`;
+  }
+  const wdHtml = ['일','월','화','수','목','금','토'].map(w => `<div class="wd">${w}</div>`).join('');
+  const offset = Array.from({length: firstWeekday}, () => '<div></div>').join('');
+  document.getElementById('monthCard').innerHTML = `
+    <div class="month-title">${m}월 실천 현황</div>
+    <div class="tier-chips">
+      <div class="tier-chip t3"><div class="val">${counts[3]}일</div><div class="lab">참 잘했어요</div></div>
+      <div class="tier-chip t2"><div class="val">${counts[2]}일</div><div class="lab">잘했어요</div></div>
+      <div class="tier-chip t1"><div class="val">${counts[1]}일</div><div class="lab">시작했어요</div></div>
+    </div>
+    <div class="cal-grid">${wdHtml}${offset}${cells}</div>
+  `;
 }
 
 async function onToggle(key){
@@ -241,6 +325,16 @@ async function loadToday(user){
   }catch(e){ state = {}; }
 }
 
+async function loadMonthData(user){
+  try{
+    const ym = todayStr.slice(0,7);
+    const res = await fetch(`${SHEET_API_URL}?action=getMonthData&phone=${encodeURIComponent(user.phone)}&yearMonth=${ym}`);
+    const data = await res.json();
+    monthRecords = {};
+    (data.records || []).forEach(r => monthRecords[r.date] = r);
+  }catch(e){ monthRecords = {}; }
+}
+
 async function init(){
   const user = getUser();
   if(!user.phone){
@@ -249,6 +343,7 @@ async function init(){
     return;
   }
   await loadToday(user);
+  await loadMonthData(user);
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('mainScreen').classList.remove('hidden');
   renderSlots();
