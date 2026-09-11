@@ -61,6 +61,22 @@
   }
   .day-summary b{color:var(--primary-dark); font-size:17px;}
 
+  /* 미션 카드 */
+  .mission-card{
+    background:var(--card); border-radius:18px; padding:16px; margin:18px 0 14px;
+    box-shadow:0 2px 8px rgba(27,107,99,0.06);
+  }
+  .mission-card .m-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .mission-card .m-title{font-size:14px; font-weight:800;}
+  .mission-card .m-day{font-size:12px; color:#0F6E56; font-weight:700;}
+  .mission-card .m-track{background:#EFF6F4; border-radius:8px; height:10px; overflow:hidden;}
+  .mission-card .m-fill{background:#0F6E56; height:100%; border-radius:8px;}
+  .mission-card .m-range{display:flex; justify-content:space-between; margin-top:6px; font-size:10.5px; color:#96a5a1;}
+  .mission-card .m-empty{font-size:13.5px; color:var(--text-soft); text-align:center; padding:6px 0;}
+  .mission-card .m-ended{text-align:center;}
+  .mission-card .m-ended-title{font-size:15px; font-weight:800;}
+  .mission-card .m-ended-sub{font-size:12px; color:var(--text-soft); margin-top:6px;}
+
   /* 오늘의 상태 카드 */
   .status-card{
     background:var(--card); border-radius:18px; padding:18px 16px 14px; margin:18px 0 14px;
@@ -85,9 +101,10 @@
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px;}
   .cal-grid .wd{font-size:10px; color:#96a5a1; text-align:center;}
   .cal-grid .day{
-    aspect-ratio:1; border-radius:6px; font-size:12px; font-weight:700;
+    position:relative; aspect-ratio:1; border-radius:6px; font-size:12px; font-weight:700;
     display:flex; align-items:center; justify-content:center; color:var(--text-soft); background:#F2F0E9;
   }
+  .cal-grid .day .flag{position:absolute; top:-6px; right:-4px; font-size:11px;}
   .cal-grid .day.t3{background:#0F6E56; color:#fff;}
   .cal-grid .day.t2{background:#9FE1CB; color:#0F6E56;}
   .cal-grid .day.t1{background:#FAEEDA; color:#854F0B;}
@@ -146,6 +163,7 @@
     </div>
 
     <div id="mainScreen" class="hidden">
+      <div id="missionCard" class="mission-card"></div>
       <div id="statusCard" class="status-card"></div>
       <div id="monthCard" class="month-card"></div>
       <div id="slotList"></div>
@@ -189,6 +207,28 @@ function currentSlotId(){
 
 let state = {}; // {morning_calcium:'예'|'', morning_water:'예'|'', ...}
 let monthRecords = {}; // {date: record}
+let missionInfo = {started:false}; // {started, startDate, endDate, dayIndex, isEnded}
+
+const MISSION_DAYS = 30;
+
+function koLabel(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  return `${m}월 ${d}일`;
+}
+
+function addDays(dateStr, n){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  dt.setDate(dt.getDate() + n);
+  return toLocalDateStr(dt);
+}
+
+function diffDays(fromStr, toStr){
+  const [fy,fm,fd] = fromStr.split('-').map(Number);
+  const [ty,tm,td] = toStr.split('-').map(Number);
+  const a = new Date(fy, fm-1, fd), b = new Date(ty, tm-1, td);
+  return Math.round((b - a) / 86400000);
+}
 
 const TIER_META = {
   3:{label:'참 잘했어요', emoji:'🌿', cls:'t3'},
@@ -277,7 +317,12 @@ function renderMonthCard(){
     if(dateStr <= todayStr && tier > 0) counts[tier]++;
     const cls = dateStr > todayStr ? '' : (TIER_META[tier].cls || '');
     const todayCls = dateStr === todayStr ? ' is-today' : '';
-    cells += `<div class="day ${cls}${todayCls}">${d}</div>`;
+    let flag = '';
+    if(missionInfo.started){
+      if(dateStr === missionInfo.startDate) flag = '<span class="flag">🚩</span>';
+      else if(dateStr === missionInfo.endDate) flag = '<span class="flag">🏁</span>';
+    }
+    cells += `<div class="day ${cls}${todayCls}">${d}${flag}</div>`;
   }
   const wdHtml = ['일','월','화','수','목','금','토'].map(w => `<div class="wd">${w}</div>`).join('');
   const offset = Array.from({length: firstWeekday}, () => '<div></div>').join('');
@@ -297,6 +342,12 @@ async function onToggle(key){
   renderSlots();
   showToast(state[key]==='예' ? '저장됐어요 ✔' : '체크 해제됨');
   await saveState();
+  if(!missionInfo.started){
+    const user = getUser();
+    await loadMissionInfo(user);
+    renderMissionCard();
+    renderMonthCard();
+  }
 }
 
 async function saveState(){
@@ -325,7 +376,55 @@ async function loadToday(user){
   }catch(e){ state = {}; }
 }
 
-async function loadMonthData(user){
+async function loadMissionInfo(user){
+  try{
+    const res = await fetch(`${SHEET_API_URL}?action=getMissionInfo&phone=${encodeURIComponent(user.phone)}`);
+    const data = await res.json();
+    if(!data.started){
+      missionInfo = {started:false};
+    }else{
+      const endDate = addDays(data.startDate, MISSION_DAYS - 1);
+      const dayIndex = diffDays(data.startDate, todayStr) + 1;
+      missionInfo = {
+        started:true,
+        startDate:data.startDate,
+        endDate,
+        dayIndex,
+        isEnded: dayIndex > MISSION_DAYS
+      };
+    }
+  }catch(e){ missionInfo = {started:false}; }
+}
+
+function renderMissionCard(){
+  const card = document.getElementById('missionCard');
+  if(!missionInfo.started){
+    card.innerHTML = `<div class="m-empty">첫 체크를 하면 30일 미션이 시작돼요 🚩</div>`;
+    return;
+  }
+  if(missionInfo.isEnded){
+    card.innerHTML = `
+      <div class="m-ended">
+        <div class="m-ended-title">🏁 미션 종료</div>
+        <div class="m-ended-sub">${koLabel(missionInfo.startDate)} ~ ${koLabel(missionInfo.endDate)} · 30일 미션을 마쳤어요</div>
+      </div>
+    `;
+    return;
+  }
+  const clampedDay = Math.min(Math.max(missionInfo.dayIndex,1), MISSION_DAYS);
+  const percent = Math.round(clampedDay / MISSION_DAYS * 100);
+  card.innerHTML = `
+    <div class="m-head">
+      <div class="m-title">🚩 칼슘 미션 진행 중</div>
+      <div class="m-day">${clampedDay} / ${MISSION_DAYS}일째</div>
+    </div>
+    <div class="m-track"><div class="m-fill" style="width:${percent}%;"></div></div>
+    <div class="m-range">
+      <div>시작 ${koLabel(missionInfo.startDate)}</div>
+      <div>종료 예정 ${koLabel(missionInfo.endDate)}</div>
+    </div>
+  `;
+}
   try{
     const ym = todayStr.slice(0,7);
     const res = await fetch(`${SHEET_API_URL}?action=getMonthData&phone=${encodeURIComponent(user.phone)}&yearMonth=${ym}`);
@@ -344,8 +443,10 @@ async function init(){
   }
   await loadToday(user);
   await loadMonthData(user);
+  await loadMissionInfo(user);
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('mainScreen').classList.remove('hidden');
+  renderMissionCard();
   renderSlots();
 }
 
