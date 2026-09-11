@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>헬스트론 습관케어 - 매장용</title>
+<style>
+  :root{
+    --bg:#F5FAF8;
+    --card:#FFFFFF;
+    --primary:#1B6B63;
+    --primary-dark:#124F49;
+    --accent:#D98E3D;
+    --success:#2F8F7A;
+    --success-bg:#E5F3EF;
+    --no-bg:#FBEFE1;
+    --text:#24312E;
+    --text-soft:#657873;
+    --border:#DCEAE6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Pretendard",sans-serif;
+    color:var(--text);
+  }
+  header{
+    background:var(--primary);
+    color:#fff;
+    padding:18px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  header h1{font-size:19px; margin:0; font-weight:800;}
+  header .sub{font-size:13px; opacity:0.85;}
+  .wrap{
+    max-width:1000px;
+    margin:0 auto;
+    padding:22px 20px 60px;
+  }
+  .layout{
+    display:grid;
+    grid-template-columns:300px 1fr;
+    gap:20px;
+  }
+  @media (max-width:800px){
+    .layout{grid-template-columns:1fr;}
+  }
+  .panel{
+    background:var(--card);
+    border-radius:16px;
+    padding:18px;
+    box-shadow:0 2px 8px rgba(27,107,99,0.06);
+  }
+  .panel h2{font-size:15px; margin:0 0 12px; color:var(--primary-dark);}
+  input[type=text]{
+    width:100%;
+    padding:12px;
+    border:2px solid var(--border);
+    border-radius:10px;
+    font-size:15px;
+    outline:none;
+    margin-bottom:12px;
+  }
+  input[type=text]:focus{border-color:var(--primary);}
+  .customer-item{
+    padding:12px 10px;
+    border-radius:10px;
+    cursor:pointer;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:14.5px;
+  }
+  .customer-item:hover{background:var(--success-bg);}
+  .customer-item.active{background:var(--success-bg); font-weight:800;}
+  .customer-item .name{font-weight:700;}
+  .customer-item .phone{color:var(--text-soft); font-size:12.5px;}
+  .customer-item .cnt{
+    background:var(--primary);
+    color:#fff;
+    font-size:12px;
+    padding:2px 8px;
+    border-radius:10px;
+  }
+  .empty-msg{color:var(--text-soft); font-size:14px; padding:20px 0; text-align:center;}
+
+  .detail-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .detail-header .who{font-size:18px; font-weight:800;}
+  .detail-header .who .phone{color:var(--text-soft); font-size:13px; font-weight:400; margin-left:8px;}
+  .month-nav{display:flex; align-items:center; gap:10px;}
+  .month-nav button{
+    border:none; background:var(--border); color:var(--primary-dark);
+    width:30px; height:30px; border-radius:8px; font-size:15px; cursor:pointer;
+  }
+  .month-nav .label{font-size:14.5px; font-weight:700; min-width:70px; text-align:center;}
+
+  .stat-row{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:8px;
+    margin-bottom:18px;
+  }
+  .stat-card{
+    background:var(--success-bg);
+    border-radius:12px;
+    padding:10px 6px;
+    text-align:center;
+  }
+  .stat-card .label{font-size:11.5px; color:var(--text-soft); margin-bottom:4px; line-height:1.3;}
+  .stat-card .val{font-size:17px; font-weight:800; color:var(--primary-dark);}
+
+  table.grid{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12.5px;
+  }
+  table.grid th, table.grid td{
+    border:1px solid var(--border);
+    text-align:center;
+    padding:5px 2px;
+    min-width:26px;
+  }
+  table.grid th{background:#EFF6F4; font-weight:700; color:var(--text-soft);}
+  table.grid td.row-label{
+    text-align:left;
+    font-weight:700;
+    background:#FBFDFC;
+    white-space:nowrap;
+    padding-left:8px;
+  }
+  .cell-yes{color:var(--success); font-weight:800;}
+  .cell-no{color:var(--accent); font-weight:800;}
+  .cell-none{color:#C9D6D2;}
+  .scroll-x{overflow-x:auto;}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>헬스트론 습관케어</h1>
+    <div class="sub">매장용 · 고객 실천 데이터</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <div class="panel">
+      <h2>고객 검색</h2>
+      <input type="text" id="searchInput" placeholder="이름 또는 전화번호 검색">
+      <div id="customerList"></div>
+    </div>
+
+    <div class="panel" id="detailPanel">
+      <div class="empty-msg">왼쪽에서 고객을 선택해주세요.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbzluRSwRT-e71Mrd4df9GU6gLJxe6XNPdNRpq6Alo_urKE9F9A7xq00xpaPePrpWJo_/exec";
+
+const ITEMS = [
+  {id:"item1", title:"건강한 식단"},
+  {id:"item2", title:"스트레스 관리"},
+  {id:"item3", title:"알맞은 운동"},
+  {id:"item4", title:"물,칼슘"},
+  {id:"item5", title:"헬스트론"}
+];
+
+let customers = [];
+let selectedPhone = null;
+let viewYear, viewMonth; // viewMonth: 1-12
+
+function initMonth(){
+  const now = new Date();
+  viewYear = now.getFullYear();
+  viewMonth = now.getMonth()+1;
+}
+initMonth();
+
+async function loadCustomers(){
+  try{
+    const res = await fetch(`${SHEET_API_URL}?action=getCustomers`);
+    const data = await res.json();
+    customers = data.customers || [];
+  }catch(e){
+    customers = [];
+  }
+  renderCustomerList();
+}
+
+function renderCustomerList(){
+  const q = document.getElementById('searchInput').value.trim();
+  const list = document.getElementById('customerList');
+  const filtered = customers.filter(c =>
+    !q || c.name.includes(q) || c.phone.includes(q)
+  );
+  if(filtered.length === 0){
+    list.innerHTML = '<div class="empty-msg">고객이 없습니다.</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(c => `
+    <div class="customer-item ${c.phone===selectedPhone?'active':''}" data-phone="${c.phone}">
+      <div>
+        <div class="name">${c.name}</div>
+        <div class="phone">${c.phone}</div>
+      </div>
+      <div class="cnt">${c.totalDays || 0}일</div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.customer-item').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      selectedPhone = el.dataset.phone;
+      renderCustomerList();
+      loadDetail();
+    });
+  });
+}
+
+function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+
+async function loadDetail(){
+  const customer = customers.find(c=>c.phone===selectedPhone);
+  if(!customer) return;
+
+  const panel = document.getElementById('detailPanel');
+  panel.innerHTML = '<div class="empty-msg">불러오는 중...</div>';
+
+  const ym = `${viewYear}-${String(viewMonth).padStart(2,'0')}`;
+  let records = [];
+  try{
+    const res = await fetch(`${SHEET_API_URL}?action=getMonthData&phone=${encodeURIComponent(selectedPhone)}&yearMonth=${ym}`);
+    const data = await res.json();
+    records = data.records || [];
+  }catch(e){ records = []; }
+
+  const byDate = {};
+  records.forEach(r => byDate[r.date] = r);
+
+  const dCount = daysInMonth(viewYear, viewMonth);
+  const dates = Array.from({length:dCount}, (_,i)=>{
+    const day = i+1;
+    return `${viewYear}-${String(viewMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  });
+
+  // 통계 계산
+  const stats = ITEMS.map(item=>{
+    const yes = dates.filter(d => byDate[d] && byDate[d][item.id]==='예').length;
+    return {title:item.title, yes};
+  });
+  const participatedDays = dates.filter(d=>byDate[d]).length;
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div class="who">${customer.name}<span class="phone">${customer.phone}</span></div>
+      <div class="month-nav">
+        <button id="prevMonth">‹</button>
+        <div class="label">${viewYear}년 ${viewMonth}월</div>
+        <button id="nextMonth">›</button>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="label">이번달 참여일</div><div class="val">${participatedDays}</div></div>
+      ${stats.map(s=>`<div class="stat-card"><div class="label">${s.title}</div><div class="val">${s.yes}</div></div>`).join('')}
+    </div>
+    <div class="scroll-x">
+      <table class="grid">
+        <thead>
+          <tr><th>항목</th>${dates.map(d=>`<th>${parseInt(d.split('-')[2])}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${ITEMS.map(item=>`
+            <tr>
+              <td class="row-label">${item.title}</td>
+              ${dates.map(d=>{
+                const rec = byDate[d];
+                if(!rec || !rec[item.id]) return '<td class="cell-none">·</td>';
+                return rec[item.id]==='예' ? '<td class="cell-yes">✔</td>' : '<td class="cell-no">✕</td>';
+              }).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('prevMonth').addEventListener('click', ()=>{
+    viewMonth--; if(viewMonth<1){viewMonth=12; viewYear--;}
+    loadDetail();
+  });
+  document.getElementById('nextMonth').addEventListener('click', ()=>{
+    viewMonth++; if(viewMonth>12){viewMonth=1; viewYear++;}
+    loadDetail();
+  });
+}
+
+document.getElementById('searchInput').addEventListener('input', renderCustomerList);
+
+loadCustomers();
+</script>
+</body>
+</html>

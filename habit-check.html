@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>오산 헬스트론 습관케어</title>
+<style>
+  :root{
+    --bg:#F5FAF8;
+    --card:#FFFFFF;
+    --primary:#1B6B63;
+    --primary-dark:#124F49;
+    --accent:#D98E3D;
+    --success:#2F8F7A;
+    --success-bg:#E5F3EF;
+    --no-bg:#FBEFE1;
+    --text:#24312E;
+    --text-soft:#657873;
+    --border:#DCEAE6;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    background:var(--bg);
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Pretendard",sans-serif;
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+  }
+  .app{
+    width:100%;
+    max-width:460px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:28px 24px 18px;
+    text-align:center;
+  }
+  header .brand{
+    font-size:14px;
+    color:var(--text-soft);
+    letter-spacing:0.5px;
+    margin-bottom:4px;
+  }
+  header h1{
+    font-size:22px;
+    margin:0;
+    color:var(--primary-dark);
+    font-weight:800;
+  }
+  header .date{
+    margin-top:8px;
+    font-size:15px;
+    color:var(--text-soft);
+  }
+  main{
+    flex:1;
+    padding:8px 20px 40px;
+  }
+
+  /* ---- 로그인 화면 ---- */
+  .login-card{
+    background:var(--card);
+    border-radius:20px;
+    padding:28px 22px;
+    margin-top:24px;
+    box-shadow:0 2px 10px rgba(27,107,99,0.08);
+  }
+  .login-card p{
+    font-size:17px;
+    line-height:1.6;
+    margin:0 0 22px;
+    color:var(--text);
+    font-weight:600;
+  }
+  label{
+    display:block;
+    font-size:15px;
+    color:var(--text-soft);
+    margin:16px 0 8px;
+    font-weight:600;
+  }
+  input[type=text], input[type=tel]{
+    width:100%;
+    font-size:20px;
+    padding:16px 14px;
+    border:2px solid var(--border);
+    border-radius:12px;
+    outline:none;
+    background:#FBFDFC;
+  }
+  input:focus{border-color:var(--primary);}
+  .btn{
+    display:block;
+    width:100%;
+    border:none;
+    border-radius:14px;
+    padding:18px;
+    font-size:19px;
+    font-weight:800;
+    cursor:pointer;
+    margin-top:22px;
+  }
+  .btn-primary{background:var(--primary); color:#fff;}
+  .btn-primary:active{background:var(--primary-dark);}
+  .btn-primary:disabled{background:#B9CFCB; cursor:not-allowed;}
+
+  /* ---- 체크 화면 ---- */
+  .greeting{
+    font-size:19px;
+    font-weight:700;
+    margin:18px 4px 20px;
+  }
+  .greeting span{color:var(--primary);}
+  .item-card{
+    background:var(--card);
+    border-radius:18px;
+    padding:20px;
+    margin-bottom:14px;
+    box-shadow:0 2px 8px rgba(27,107,99,0.06);
+    border:2px solid transparent;
+    transition:border-color .15s;
+  }
+  .item-card.answered{border-color:var(--border);}
+  .item-num{
+    display:inline-block;
+    width:26px; height:26px;
+    background:var(--primary);
+    color:#fff;
+    border-radius:50%;
+    font-size:14px;
+    font-weight:800;
+    text-align:center;
+    line-height:26px;
+    margin-right:8px;
+  }
+  .item-title{
+    font-size:17px;
+    font-weight:800;
+    display:inline;
+  }
+  .item-desc{
+    font-size:14.5px;
+    color:var(--text-soft);
+    margin:8px 0 16px 34px;
+    line-height:1.5;
+  }
+  .toggle-row{
+    display:flex;
+    gap:10px;
+  }
+  .toggle-btn{
+    flex:1;
+    padding:14px 0;
+    font-size:17px;
+    font-weight:800;
+    border-radius:12px;
+    border:2px solid var(--border);
+    background:#FBFDFC;
+    color:var(--text-soft);
+    cursor:pointer;
+  }
+  .toggle-btn.yes.active{background:var(--success-bg); border-color:var(--success); color:var(--success);}
+  .toggle-btn.no.active{background:var(--no-bg); border-color:var(--accent); color:var(--accent);}
+
+  .submit-wrap{
+    position:sticky;
+    bottom:0;
+    background:linear-gradient(to top, var(--bg) 70%, transparent);
+    padding:16px 0 4px;
+  }
+
+  /* ---- 완료 화면 ---- */
+  .done-card{
+    background:var(--card);
+    border-radius:20px;
+    padding:32px 24px;
+    margin-top:24px;
+    text-align:center;
+    box-shadow:0 2px 10px rgba(27,107,99,0.08);
+  }
+  .done-card .emoji{font-size:52px;}
+  .done-card h2{font-size:21px; margin:10px 0 6px; color:var(--primary-dark);}
+  .done-card p{font-size:15px; color:var(--text-soft); margin:0 0 18px;}
+  .summary-list{text-align:left; margin-top:10px;}
+  .summary-row{
+    display:flex;
+    align-items:center;
+    padding:10px 4px;
+    border-bottom:1px solid var(--border);
+    font-size:15.5px;
+  }
+  .summary-row:last-child{border-bottom:none;}
+  .summary-row .mark{
+    width:24px; font-size:17px; margin-right:10px; text-align:center;
+  }
+  .summary-row.yes .mark{color:var(--success);}
+  .summary-row.no .mark{color:var(--accent);}
+
+  footer{
+    text-align:center;
+    padding:6px 0 26px;
+  }
+  footer a{
+    color:var(--text-soft);
+    font-size:13px;
+    text-decoration:underline;
+  }
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">오산 헬스트론</div>
+    <h1>오늘의 건강습관 5가지</h1>
+    <div class="date" id="todayLabel"></div>
+  </header>
+
+  <main>
+    <!-- 로그인 화면 -->
+    <div id="loginScreen" class="login-card hidden">
+      <p>처음 오셨네요!<br>성함과 전화번호를 입력해주세요.</p>
+      <label for="nameInput">성함</label>
+      <input type="text" id="nameInput" placeholder="예: 홍길동">
+      <label for="phoneInput">전화번호</label>
+      <input type="tel" id="phoneInput" placeholder="예: 01012345678" inputmode="numeric">
+      <button class="btn btn-primary" id="loginBtn">시작하기</button>
+    </div>
+
+    <!-- 체크 화면 -->
+    <div id="checkScreen" class="hidden">
+      <div class="greeting" id="greetingText"></div>
+      <div id="itemList"></div>
+      <div class="submit-wrap">
+        <button class="btn btn-primary" id="submitBtn" disabled>제출하기</button>
+      </div>
+    </div>
+
+    <!-- 완료 화면 -->
+    <div id="doneScreen" class="done-card hidden">
+      <div class="emoji">🎉</div>
+      <h2 id="doneTitle">오늘 체크 완료!</h2>
+      <p>꾸준한 실천이 건강을 만듭니다. 내일도 만나요 😊</p>
+      <div class="summary-list" id="doneSummary"></div>
+    </div>
+  </main>
+
+  <footer>
+    <a href="#" id="changePhoneLink">번호 변경</a>
+  </footer>
+</div>
+
+<script>
+/* ===== 설정 ===== */
+const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbzluRSwRT-e71Mrd4df9GU6gLJxe6XNPdNRpq6Alo_urKE9F9A7xq00xpaPePrpWJo_/exec";
+
+const ITEMS = [
+  {id:"item1", title:"건강한 식단", desc:"고기, 채소, 과일, 생선 잘 챙겨 드셨나요?"},
+  {id:"item2", title:"스트레스 관리", desc:"산책, 복식호흡 하셨나요?"},
+  {id:"item3", title:"알맞은 운동", desc:"등에 땀이 맺히게 운동하셨나요?"},
+  {id:"item4", title:"물, 칼슘 충분히", desc:"물과 칼슘 챙겨 드셨나요?"},
+  {id:"item5", title:"헬스트론", desc:"오늘 헬스트론 체험하셨나요?"}
+];
+
+function toLocalDateStr(d){
+  d = d || new Date();
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+const todayStr = toLocalDateStr();
+document.getElementById('todayLabel').textContent =
+  new Date().toLocaleDateString('ko-KR', {month:'long', day:'numeric', weekday:'long'});
+
+const answers = {};
+
+function getUser(){
+  return {
+    phone: localStorage.getItem('habit_phone') || '',
+    name: localStorage.getItem('habit_name') || ''
+  };
+}
+
+function showScreen(id){
+  ['loginScreen','checkScreen','doneScreen'].forEach(s=>{
+    document.getElementById(s).classList.toggle('hidden', s!==id);
+  });
+}
+
+function renderItems(){
+  const list = document.getElementById('itemList');
+  list.innerHTML = '';
+  ITEMS.forEach((item, idx)=>{
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.id = 'card_'+item.id;
+    card.innerHTML = `
+      <div><span class="item-num">${idx+1}</span><span class="item-title">${item.title}</span></div>
+      <div class="item-desc">${item.desc}</div>
+      <div class="toggle-row">
+        <button type="button" class="toggle-btn yes" data-item="${item.id}" data-val="예">예 잘했어요</button>
+        <button type="button" class="toggle-btn no" data-item="${item.id}" data-val="아니오">아니요</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+  list.querySelectorAll('.toggle-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const itemId = btn.dataset.item;
+      answers[itemId] = btn.dataset.val;
+      const card = document.getElementById('card_'+itemId);
+      card.classList.add('answered');
+      card.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      updateSubmitState();
+    });
+  });
+}
+
+function updateSubmitState(){
+  const done = ITEMS.every(it => answers[it.id]);
+  document.getElementById('submitBtn').disabled = !done;
+}
+
+function renderDoneSummary(data){
+  const wrap = document.getElementById('doneSummary');
+  wrap.innerHTML = '';
+  ITEMS.forEach(item=>{
+    const val = data[item.id] || answers[item.id] || '-';
+    const row = document.createElement('div');
+    row.className = 'summary-row ' + (val==='예' ? 'yes' : 'no');
+    row.innerHTML = `<span class="mark">${val==='예'?'✔':'✕'}</span><span>${item.title}</span>`;
+    wrap.appendChild(row);
+  });
+}
+
+async function checkToday(phone){
+  try{
+    const res = await fetch(`${SHEET_API_URL}?action=checkToday&phone=${encodeURIComponent(phone)}&date=${todayStr}`);
+    return await res.json();
+  }catch(e){
+    return {submitted:false};
+  }
+}
+
+async function submitAnswers(user){
+  const payload = {
+    action:'submit',
+    phone:user.phone,
+    name:user.name,
+    date:todayStr,
+    ...answers,
+    timestamp:new Date().toISOString()
+  };
+  await fetch(SHEET_API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify(payload)
+  });
+}
+
+async function init(){
+  const user = getUser();
+  if(!user.phone){
+    showScreen('loginScreen');
+    return;
+  }
+  document.getElementById('greetingText').innerHTML = `안녕하세요, <span>${user.name}</span>님! 오늘도 힘내세요 💪`;
+
+  const status = await checkToday(user.phone);
+  if(status.submitted){
+    document.getElementById('doneTitle').textContent = '오늘 체크 완료!';
+    renderDoneSummary(status.data || {});
+    showScreen('doneScreen');
+  }else{
+    renderItems();
+    showScreen('checkScreen');
+  }
+}
+
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  const name = document.getElementById('nameInput').value.trim();
+  const phone = document.getElementById('phoneInput').value.trim().replace(/[^0-9]/g,'');
+  if(!name){ alert('성함을 입력해주세요.'); return; }
+  if(phone.length < 9){ alert('전화번호를 정확히 입력해주세요.'); return; }
+  localStorage.setItem('habit_phone', phone);
+  localStorage.setItem('habit_name', name);
+  init();
+});
+
+document.getElementById('submitBtn').addEventListener('click', async ()=>{
+  const user = getUser();
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '제출 중...';
+  await submitAnswers(user);
+  document.getElementById('doneTitle').textContent = '오늘도 실천 완료!';
+  renderDoneSummary({});
+  showScreen('doneScreen');
+});
+
+document.getElementById('changePhoneLink').addEventListener('click', (e)=>{
+  e.preventDefault();
+  if(confirm('번호를 변경하시겠어요? 다시 처음부터 입력합니다.')){
+    localStorage.removeItem('habit_phone');
+    localStorage.removeItem('habit_name');
+    location.reload();
+  }
+});
+
+init();
+</script>
+</body>
+</html>
