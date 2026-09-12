@@ -340,8 +340,8 @@ function renderMonthCard(){
 async function onToggle(key){
   state[key] = state[key] === '예' ? '' : '예';
   renderSlots();
-  showToast(state[key]==='예' ? '저장됐어요 ✔' : '체크 해제됨');
-  await saveState();
+  const ok = await saveState();
+  showToast(ok ? (state[key]==='예' ? '저장됐어요 ✔' : '체크 해제됨') : '저장 실패, 다시 눌러주세요 ⚠');
   if(!missionInfo.started){
     const user = getUser();
     await loadMissionInfo(user);
@@ -360,12 +360,16 @@ async function saveState(){
     ...state
   };
   try{
-    await fetch(SHEET_API_URL, {
+    const res = await fetch(SHEET_API_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain'},
       body:JSON.stringify(payload)
     });
-  }catch(e){ /* 네트워크 오류 시 다음 조작에서 재시도됨 */ }
+    const data = await res.json();
+    return !!data.ok;
+  }catch(e){
+    return false;
+  }
 }
 
 async function loadToday(user){
@@ -442,9 +446,11 @@ async function init(){
     document.getElementById('mainScreen').classList.add('hidden');
     return;
   }
-  await loadToday(user);
-  await loadMonthData(user);
-  await loadMissionInfo(user);
+  await Promise.all([
+    loadToday(user),
+    loadMonthData(user),
+    loadMissionInfo(user)
+  ]);
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('mainScreen').classList.remove('hidden');
   renderMissionCard();
