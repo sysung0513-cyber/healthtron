@@ -384,19 +384,7 @@ async function loadMissionInfo(user){
   try{
     const res = await fetch(`${SHEET_API_URL}?action=getMissionInfo&phone=${encodeURIComponent(user.phone)}`);
     const data = await res.json();
-    if(!data.started){
-      missionInfo = {started:false};
-    }else{
-      const endDate = addDays(data.startDate, MISSION_DAYS - 1);
-      const dayIndex = diffDays(data.startDate, todayStr) + 1;
-      missionInfo = {
-        started:true,
-        startDate:data.startDate,
-        endDate,
-        dayIndex,
-        isEnded: dayIndex > MISSION_DAYS
-      };
-    }
+    applyMissionData_(data);
   }catch(e){ missionInfo = {started:false}; }
 }
 
@@ -429,14 +417,35 @@ function renderMissionCard(){
     </div>
   `;
 }
-async function loadMonthData(user){
+async function loadInitData(user){
   try{
-    const ym = todayStr.slice(0,7);
-    const res = await fetch(`${SHEET_API_URL}?action=getMonthData&phone=${encodeURIComponent(user.phone)}&yearMonth=${ym}`);
+    const res = await fetch(`${SHEET_API_URL}?action=getInit&phone=${encodeURIComponent(user.phone)}&date=${todayStr}`);
     const data = await res.json();
+    state = data.today || {};
     monthRecords = {};
-    (data.records || []).forEach(r => monthRecords[r.date] = r);
-  }catch(e){ monthRecords = {}; }
+    ((data.month && data.month.records) || []).forEach(r => monthRecords[r.date] = r);
+    applyMissionData_(data.mission);
+  }catch(e){
+    state = {};
+    monthRecords = {};
+    missionInfo = {started:false};
+  }
+}
+
+function applyMissionData_(missionRaw){
+  if(!missionRaw || !missionRaw.started){
+    missionInfo = {started:false};
+    return;
+  }
+  const endDate = addDays(missionRaw.startDate, MISSION_DAYS - 1);
+  const dayIndex = diffDays(missionRaw.startDate, todayStr) + 1;
+  missionInfo = {
+    started:true,
+    startDate:missionRaw.startDate,
+    endDate,
+    dayIndex,
+    isEnded: dayIndex > MISSION_DAYS
+  };
 }
 
 async function init(){
@@ -446,11 +455,7 @@ async function init(){
     document.getElementById('mainScreen').classList.add('hidden');
     return;
   }
-  await Promise.all([
-    loadToday(user),
-    loadMonthData(user),
-    loadMissionInfo(user)
-  ]);
+  await loadInitData(user);
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('mainScreen').classList.remove('hidden');
   renderMissionCard();
