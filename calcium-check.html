@@ -131,6 +131,7 @@
   .toggle-item .label{font-size:15px; font-weight:700; color:var(--text-soft);}
   .toggle-item.done{background:var(--success-bg); border-color:var(--success);}
   .toggle-item.done .label{color:var(--success);}
+  #slotList.saving .toggle-item{pointer-events:none; opacity:0.65;}
 
   footer{text-align:center; padding:10px 0 26px;}
   footer a{color:var(--text-soft); font-size:13px; text-decoration:underline;}
@@ -349,9 +350,11 @@ async function onToggle(key){
 async function queueSave(){
   if(saveInFlight){ saveQueued = true; return; }
   saveInFlight = true;
+  document.getElementById('slotList').classList.add('saving');
   const ok = await saveState();
   showToast(ok ? '저장됐어요 ✔' : '저장 실패, 다시 눌러주세요 ⚠');
   saveInFlight = false;
+  document.getElementById('slotList').classList.remove('saving');
   if(saveQueued){
     saveQueued = false;
     queueSave(); // 저장 중에 추가로 바뀐 최신 상태를 이어서 저장
