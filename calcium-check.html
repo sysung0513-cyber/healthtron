@@ -337,11 +337,26 @@ function renderMonthCard(){
   `;
 }
 
+let saveInFlight = false;
+let saveQueued = false;
+
 async function onToggle(key){
   state[key] = state[key] === '예' ? '' : '예';
   renderSlots();
+  queueSave();
+}
+
+async function queueSave(){
+  if(saveInFlight){ saveQueued = true; return; }
+  saveInFlight = true;
   const ok = await saveState();
-  showToast(ok ? (state[key]==='예' ? '저장됐어요 ✔' : '체크 해제됨') : '저장 실패, 다시 눌러주세요 ⚠');
+  showToast(ok ? '저장됐어요 ✔' : '저장 실패, 다시 눌러주세요 ⚠');
+  saveInFlight = false;
+  if(saveQueued){
+    saveQueued = false;
+    queueSave(); // 저장 중에 추가로 바뀐 최신 상태를 이어서 저장
+    return;
+  }
   if(!missionInfo.started){
     const user = getUser();
     await loadMissionInfo(user);
@@ -418,18 +433,33 @@ function renderMissionCard(){
   `;
 }
 async function loadInitData(user){
-  try{
-    const res = await fetch(`${SHEET_API_URL}?action=getInit&phone=${encodeURIComponent(user.phone)}&date=${todayStr}`);
-    const data = await res.json();
-    state = data.today || {};
-    monthRecords = {};
-    ((data.month && data.month.records) || []).forEach(r => monthRecords[r.date] = r);
-    applyMissionData_(data.mission);
-  }catch(e){
-    state = {};
-    monthRecords = {};
-    missionInfo = {started:false};
+  for(let attempt = 0; attempt < 2; attempt++){
+    try{
+      const res = await fetch(`${SHEET_API_URL}?action=getInit&phone=${encodeURIComponent(user.phone)}&date=${todayStr}`);
+      const data = await res.json();
+      if(data.error) throw new Error(data.error);
+      state = data.today || {};
+      monthRecords = {};
+      ((data.month && data.month.records) || []).forEach(r => monthRecords[r.date] = r);
+      applyMissionData_(data.mission);
+      return true;
+    }catch(e){
+      if(attempt === 0) await new Promise(r => setTimeout(r, 800));
+    }
   }
+  return false;
+}
+
+function showLoadError(){
+  document.getElementById('missionCard').innerHTML = '';
+  document.getElementById('monthCard').innerHTML = '';
+  document.getElementById('slotList').innerHTML = '';
+  document.getElementById('statusCard').innerHTML = `
+    <div class="stamp" style="color:var(--accent);">연결에 실패했어요</div>
+    <div class="sub">인터넷 상태를 확인하고 다시 시도해주세요</div>
+    <button class="btn btn-primary" id="retryBtn" style="margin-top:14px;">다시 시도</button>
+  `;
+  document.getElementById('retryBtn').addEventListener('click', init);
 }
 
 function applyMissionData_(missionRaw){
@@ -455,9 +485,13 @@ async function init(){
     document.getElementById('mainScreen').classList.add('hidden');
     return;
   }
-  await loadInitData(user);
+  const ok = await loadInitData(user);
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('mainScreen').classList.remove('hidden');
+  if(!ok){
+    showLoadError();
+    return;
+  }
   renderMissionCard();
   renderSlots();
 }
