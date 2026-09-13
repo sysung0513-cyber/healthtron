@@ -374,17 +374,19 @@ async function saveState(){
     date:todayStr,
     ...state
   };
-  try{
-    const res = await fetch(SHEET_API_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify(payload)
-    });
-    const data = await res.json();
-    return !!data.ok;
-  }catch(e){
-    return false;
+  for(let attempt = 0; attempt < 3; attempt++){
+    try{
+      const res = await fetch(SHEET_API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain'},
+        body:JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if(data.ok) return true;
+    }catch(e){ /* 재시도 */ }
+    if(attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
   }
+  return false;
 }
 
 async function loadToday(user){
@@ -498,9 +500,10 @@ async function init(){
 
 document.getElementById('loginBtn').addEventListener('click', ()=>{
   const name = document.getElementById('nameInput').value.trim();
-  const phone = document.getElementById('phoneInput').value.trim().replace(/[^0-9]/g,'');
+  let phone = document.getElementById('phoneInput').value.trim().replace(/[^0-9]/g,'');
+  if(phone.startsWith('0')) phone = phone.slice(1); // 010-... → 10-... (구글시트 자동 숫자변환과 항상 일치하도록 통일)
   if(!name){ alert('성함을 입력해주세요.'); return; }
-  if(phone.length < 9){ alert('전화번호를 정확히 입력해주세요.'); return; }
+  if(phone.length < 8){ alert('전화번호를 정확히 입력해주세요.'); return; }
   localStorage.setItem('cw_phone', phone);
   localStorage.setItem('cw_name', name);
   init();
