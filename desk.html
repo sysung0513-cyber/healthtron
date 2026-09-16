@@ -891,29 +891,12 @@ function doCheckin(id){
   renderCheckinLog();
   refocusScan();
 
-  if(c.birth){
-    const bd = daysUntilBirthday(c.birth, today);
-    if(bd===0) showBirthdayAlert(c);
-  }
+  // 생일 안내는 목록의 "🎂 생일" 배지로 확인 가능. 확인 버튼이 필요한 별도 팝업은
+  // 연속 QR 스캔을 막았기 때문에 출석체크 흐름에서는 띄우지 않음.
   // 3일연속 쿠폰 알림은 위 출석확인 팝업에 표시만 하고, 확인버튼 필요한 별도 팝업은 안 띄움
   // (teacher.html의 시간대별 탭에서 강사가 직접 확인 후 지급)
 }
-function showBirthdayAlert(c){
-  const wrap = document.createElement('div');
-  wrap.className = 'modal-bg';
-  wrap.innerHTML = `
-    <div class="modal" style="text-align:center; border-top:6px solid #F5A5B0;">
-      <div style="font-size:40px; margin:8px 0;">🎂</div>
-      <h3 style="margin:0 0 8px;">오늘 ${c.name}님 생신이에요!</h3>
-      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.birth}${c.purchased?' · <span class="badge vip">VIP</span>':''}</div>
-      <div style="background:#FFF6F7; border:1px solid #F5C6CB; border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
-        생신 축하 인사 한마디 건네드리면 정말 좋아하실 거예요.
-      </div>
-      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">확인했어요</button>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-}
+
 function refocusScan(){
   // 출석체크 탭이면 눈에 보이는 입력창에, 아니면 전역(숨김) 입력창에 포커스
   const el = document.getElementById('scanInput') || document.getElementById('globalScanInput');
