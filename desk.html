@@ -1374,7 +1374,7 @@ function riskSectionHtml(title, borderColor, items){
       ${items.length ? items.map(x=>`
         <div class="row">
           <span class="name" onclick="openCustomerDetail('${x.c.id}')" style="cursor:pointer; text-decoration:underline;">${x.c.name} <span class="sub">${x.c.phone||''}</span></span>
-          <span class="sub" style="color:#C0392B;">누적 ${x.totalVisitDays}일 방문 · ${x.gapDays!==null?x.gapDays+'일째 미방문':'방문기록 없음'}</span>
+          <span class="sub" style="color:#C0392B;">등록 ${x.c.firstVisit||'-'} · 누적 ${x.totalVisitDays}일 방문 · ${x.gapDays!==null?x.gapDays+'일째 미방문':'방문기록 없음'}</span>
         </div>
       `).join('') : '<div class="empty">해당하는 고객이 없어요</div>'}
     </div>
