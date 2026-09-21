@@ -1367,31 +1367,108 @@ function buildRiskList(minVisitDays, absentBizDays){
     return {c, totalVisitDays, lv, gapDays};
   }).filter(Boolean).sort((a,b)=>(b.gapDays||0)-(a.gapDays||0));
 }
-function riskSectionHtml(title, borderColor, items){
+// 이 고객이 지금 이탈위험 등급에 해당하는지(등급이 겹치면 가장 심한 등급) 반환. 시간대별 "결석복귀" 배지에 사용.
+function riskTierForCustomer(c){
+  const visitDates = new Set((c.visits||[]).map(v=>v.date));
+  const totalVisitDays = visitDates.size;
+  const today = todayStr();
+  const baseDate = previousBusinessDay(today);
+  const absent = n => recentBusinessDays(baseDate, n).every(d=>!visitDates.has(d));
+  if(totalVisitDays>=60 && absent(3)) return {label:'장기', bg:'#FDEDEC', fg:'#943126'};
+  if(totalVisitDays>=30 && absent(3)) return {label:'중기', bg:'#FDEBD0', fg:'#B9770E'};
+  if(totalVisitDays>=5 && absent(2)) return {label:'신규', bg:'#FEF9E7', fg:'#B7950B'};
+  return null;
+}
+
+/* -------- 확인완료 저장(이 브라우저 전용, localStorage) --------
+   { [고객id]: '확인 당시 마지막방문일' } 형태로 저장.
+   그 고객이 실제로 다시 방문해서 마지막방문일이 바뀌면 자동으로 삭제됨(복귀 처리). */
+function loadRiskAcks(){
+  try{ return JSON.parse(localStorage.getItem('riskAcks')||'{}'); }catch(e){ return {}; }
+}
+function saveRiskAcks(acks){ localStorage.setItem('riskAcks', JSON.stringify(acks)); }
+function purgeStaleRiskAcks(){
+  const acks = loadRiskAcks();
+  let changed = false;
+  Object.keys(acks).forEach(id=>{
+    const c = customers.find(x=>x.id===id);
+    if(!c || lastVisitDate(c) !== acks[id]){ delete acks[id]; changed = true; }
+  });
+  if(changed) saveRiskAcks(acks);
+  return acks;
+}
+function onCheckRisk(custId){
+  const c = customers.find(x=>x.id===custId);
+  if(!c) return;
+  const acks = loadRiskAcks();
+  acks[custId] = lastVisitDate(c);
+  saveRiskAcks(acks);
+  renderRisk();
+}
+function onUncheckRisk(custId){
+  const acks = loadRiskAcks();
+  delete acks[custId];
+  saveRiskAcks(acks);
+  renderRisk();
+}
+
+let riskView = 'active'; // 'active' | 'done'
+function setRiskView(v){ riskView = v; renderRisk(); }
+
+function riskSectionHtml(title, borderColor, items, acks){
+  const visible = items.filter(x=>!acks[x.c.id]);
   return `
     <div class="card" style="border:2px solid ${borderColor}; margin-bottom:14px;">
-      <h3>${title} <span class="sub" style="font-weight:400;">(${items.length}명)</span></h3>
-      ${items.length ? items.map(x=>`
-        <div class="row">
-          <span class="name" onclick="openCustomerDetail('${x.c.id}')" style="cursor:pointer; text-decoration:underline;">${x.c.name} <span class="sub">${x.c.phone||''}</span></span>
-          <span class="sub" style="color:#C0392B;">등록 ${x.c.firstVisit||'-'} · 누적 ${x.totalVisitDays}일 방문 · ${x.gapDays!==null?x.gapDays+'일째 미방문':'방문기록 없음'}</span>
+      <h3>${title} <span class="sub" style="font-weight:400;">(${visible.length}명)</span></h3>
+      ${visible.length ? visible.map(x=>`
+        <div class="row" style="align-items:flex-start; gap:10px;">
+          <input type="checkbox" onchange="onCheckRisk('${x.c.id}')" style="width:18px; height:18px; margin-top:2px; flex-shrink:0;">
+          <div style="flex:1;">
+            <span class="name" onclick="openCustomerDetail('${x.c.id}')" style="cursor:pointer; text-decoration:underline;">${x.c.name} <span class="sub">${x.c.phone||''}</span></span><br>
+            <span class="sub" style="color:#C0392B;">등록 ${x.c.firstVisit||'-'} · 누적 ${x.totalVisitDays}일 방문 · ${x.gapDays!==null?x.gapDays+'일째 미방문':'방문기록 없음'}</span>
+          </div>
         </div>
       `).join('') : '<div class="empty">해당하는 고객이 없어요</div>'}
     </div>
   `;
 }
+function riskDoneHtml(acks){
+  const items = Object.keys(acks).map(id=>customers.find(c=>c.id===id)).filter(Boolean)
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  return `
+    <div class="card">
+      <h3>✅ 확인완료 <span class="sub" style="font-weight:400;">(${items.length}명)</span></h3>
+      ${items.length ? items.map(c=>`
+        <div class="row">
+          <span class="name" onclick="openCustomerDetail('${c.id}')" style="cursor:pointer; text-decoration:underline;">${c.name} <span class="sub">${c.phone||''}</span></span>
+          <button style="font-size:12px; padding:6px 10px; border-radius:8px; border:1px solid var(--muted); background:none; cursor:pointer; color:var(--muted);" onclick="onUncheckRisk('${c.id}')">되돌리기</button>
+        </div>
+      `).join('') : '<div class="empty">확인 처리한 고객이 없어요</div>'}
+      <div class="sub" style="margin-top:8px; font-size:12px; color:var(--muted);">※ 해당 고객이 다시 방문하면 이 목록에서도 자동으로 사라집니다.</div>
+    </div>
+  `;
+}
 function renderRisk(){
+  purgeStaleRiskAcks();
+  const acks = loadRiskAcks();
   const list1 = buildRiskList(5, 2);
   const list2 = buildRiskList(30, 3);
   const list3 = buildRiskList(60, 3);
+  const doneCount = Object.keys(acks).length;
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">관리대상 고객</h2>
-    <div class="card" style="margin-bottom:14px; font-size:12.5px; color:var(--muted);">
-      결석 일수는 주말·공휴일을 제외한 영업일 기준이며, 오늘은 아직 출석 가능성이 있어 제외하고 <b>어제(직전 영업일)</b>를 기준으로 판정합니다. (공휴일 목록: 2026년 기준 — 연초에 다음 해 날짜로 갱신 필요)
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <button class="btn ${riskView==='active'?'btn-primary':''}" style="flex:1;" onclick="setRiskView('active')">관리대상</button>
+      <button class="btn ${riskView==='done'?'btn-primary':''}" style="flex:1;" onclick="setRiskView('done')">확인완료 (${doneCount})</button>
     </div>
-    ${riskSectionHtml('🟡 신규 이탈 위험 — 5일↑ 방문 · 최근 2영업일 연속 결석', '#F1C40F', list1)}
-    ${riskSectionHtml('🟠 중기 이탈 위험 — 30일↑ 방문 · 최근 3영업일 연속 결석', '#E67E22', list2)}
-    ${riskSectionHtml('🔴 장기 이탈 위험 — 60일↑ 방문 · 최근 3영업일 연속 결석', '#C0392B', list3)}
+    ${riskView==='active' ? `
+      <div class="card" style="margin-bottom:14px; font-size:12.5px; color:var(--muted);">
+        결석 일수는 주말·공휴일을 제외한 영업일 기준이며, 오늘은 아직 출석 가능성이 있어 제외하고 <b>어제(직전 영업일)</b>를 기준으로 판정합니다. 체크하면 이 목록에서 사라지고 "확인완료"로 이동하며, 그 고객이 다시 방문하면 자동으로 정리됩니다. (공휴일 목록: 2026년 기준 — 연초에 다음 해 날짜로 갱신 필요)
+      </div>
+      ${riskSectionHtml('🟡 신규 이탈 위험 — 5일↑ 방문 · 최근 2영업일 연속 결석', '#F1C40F', list1, acks)}
+      ${riskSectionHtml('🟠 중기 이탈 위험 — 30일↑ 방문 · 최근 3영업일 연속 결석', '#E67E22', list2, acks)}
+      ${riskSectionHtml('🔴 장기 이탈 위험 — 60일↑ 방문 · 최근 3영업일 연속 결석', '#C0392B', list3, acks)}
+    ` : riskDoneHtml(acks)}
   `;
 }
 function lastVisitDate(c){
@@ -1585,7 +1662,7 @@ function renderTimelineBody(){
     return `<div class="slot-card">
       <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${confirmedCount}/${list.length}명 확인</span></div>
       ${list.map(v=>`<div class="slot-name" style="${v.confirmed?'opacity:0.55;':''}">
-        <span onclick="openCustomerDetail('${v.cust.id}')" style="cursor:pointer; ${v.confirmed?'text-decoration:line-through;':''}"><span style="${v.cust.firstVisit===v.date?'background:#DCEBFC; padding:2px 6px; border-radius:6px;':''}">${v.cust.name}</span> ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge" style="background:#FDE8E8; color:#C0392B; font-weight:700;">🎟️ 3일연속</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')} ${!v.cust.purchased && (v.cust.threeManStart||v.cust.firstVisit) && v.date<=threeManEnd(v.cust) ? `<span class="badge" style="background:#E3F2FD; color:#1565C0;">🆕 3만볼트 이용가능(~${threeManEnd(v.cust)})</span>` : ''} ${v.cust.firstVisit ? (isRecentRegBadge(v.cust.firstVisit, v.date) ? `<span class="badge" style="background:#E6F1FB; color:#0C447C;">🆕 등록 ${v.cust.firstVisit}</span>` : `<span style="font-size:12px; color:var(--muted);">등록 ${v.cust.firstVisit}</span>`) : ''}</span>
+        <span onclick="openCustomerDetail('${v.cust.id}')" style="cursor:pointer; ${v.confirmed?'text-decoration:line-through;':''}"><span style="${v.cust.firstVisit===v.date?'background:#DCEBFC; padding:2px 6px; border-radius:6px;':''}">${v.cust.name}</span> ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge" style="background:#FDE8E8; color:#C0392B; font-weight:700;">🎟️ 3일연속</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')} ${!v.cust.purchased && (v.cust.threeManStart||v.cust.firstVisit) && v.date<=threeManEnd(v.cust) ? `<span class="badge" style="background:#E3F2FD; color:#1565C0;">🆕 3만볼트 이용가능(~${threeManEnd(v.cust)})</span>` : ''} ${v.cust.firstVisit ? (isRecentRegBadge(v.cust.firstVisit, v.date) ? `<span class="badge" style="background:#E6F1FB; color:#0C447C;">🆕 등록 ${v.cust.firstVisit}</span>` : `<span style="font-size:12px; color:var(--muted);">등록 ${v.cust.firstVisit}</span>`) : ''} ${v.date===todayStr() ? (()=>{const rt=riskTierForCustomer(v.cust); return rt?`<span class="badge" style="background:${rt.bg}; color:${rt.fg}; font-weight:700;">🚦 결석복귀(${rt.label})</span>`:'';})() : ''}</span>
         <span style="display:flex; align-items:center; gap:8px;">
           <span class="t">${v.time||''}</span>
           <button class="btn-mini" style="background:${v.confirmed?'#7BAE7F':'#ccc'};" onclick="event.stopPropagation(); toggleVisitConfirmed('${v.cust.id}','${v.date}','${v.session}')">${v.confirmed?'✅ 확인됨':'⬜ 확인'}</button>
