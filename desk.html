@@ -1354,7 +1354,8 @@ function setStatMode(m){ statMode = m; renderStats(); }
 /* ---------------- 관리대상(이탈 위험) 탭 ---------------- */
 function buildRiskList(minVisitDays, absentBizDays){
   const today = todayStr();
-  const checkDays = recentBusinessDays(today, absentBizDays); // 최근 N영업일(오늘 포함)
+  const baseDate = previousBusinessDay(today); // 오늘은 아직 출석 가능성이 남아있으므로 제외, 직전 영업일을 기준으로 판정
+  const checkDays = recentBusinessDays(baseDate, absentBizDays); // 기준일(어제)부터 거슬러 최근 N영업일
   return customers.map(c=>{
     const visitDates = new Set((c.visits||[]).map(v=>v.date));
     const totalVisitDays = visitDates.size;
@@ -1386,7 +1387,7 @@ function renderRisk(){
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">관리대상 고객</h2>
     <div class="card" style="margin-bottom:14px; font-size:12.5px; color:var(--muted);">
-      결석 일수는 주말·공휴일을 제외한 영업일 기준으로 계산됩니다. (기준 목록: 2026년 공휴일 — 연초에 다음 해 날짜로 갱신 필요)
+      결석 일수는 주말·공휴일을 제외한 영업일 기준이며, 오늘은 아직 출석 가능성이 있어 제외하고 <b>어제(직전 영업일)</b>를 기준으로 판정합니다. (공휴일 목록: 2026년 기준 — 연초에 다음 해 날짜로 갱신 필요)
     </div>
     ${riskSectionHtml('🟡 신규 이탈 위험 — 5일↑ 방문 · 최근 2영업일 연속 결석', '#F1C40F', list1)}
     ${riskSectionHtml('🟠 중기 이탈 위험 — 30일↑ 방문 · 최근 3영업일 연속 결석', '#E67E22', list2)}
