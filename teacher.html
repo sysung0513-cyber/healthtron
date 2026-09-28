@@ -243,6 +243,26 @@ function isBusinessDay(dateStr){
   if(HOLIDAYS_2026.has(dateStr)) return false;
   return true;
 }
+// dateStr 기준, 그 이전(포함 안 함)의 가장 가까운 영업일
+function previousBusinessDay(dateStr){
+  let d = dateStr;
+  for(let i=0;i<14;i++){ // 최대 2주까지만 거슬러 올라감 (안전장치)
+    d = addDaysStr(d, -1);
+    if(isBusinessDay(d)) return d;
+  }
+  return d;
+}
+// 휴무일(주말·공휴일)에 지나간 생일 찾기: 직전 영업일 다음날 ~ 어제 사이에 생일이 있었으면 그 날짜 반환
+function birthdayMissedDate(birthStr, dateStr){
+  if(!birthStr || !isBusinessDay(dateStr)) return null;
+  const prev = previousBusinessDay(dateStr);
+  let d = addDaysStr(prev, 1);
+  while(d < dateStr){
+    if(daysUntilBirthday(birthStr, d) === 0) return d;
+    d = addDaysStr(d, 1);
+  }
+  return null;
+}
 // 특정 날짜(asOfDate) 기준, 주말·공휴일은 건너뛰고 영업일만 따져서 며칠 연속 출석했는지 계산
 // 2026-08-31에 모든 고객에게 3만볼트 쿠폰을 일괄 지급했으므로,
 // 그 이전 방문기록은 연속출석 계산에서 제외하고 9월 1일부터 새로 카운트함.
@@ -759,26 +779,7 @@ function doCheckin(id, fromScanner){
   renderCheckinLog();
   if(fromScanner) refocusScan(); // 손으로 탭한 경우엔 재포커스 안 함(폰에서 가상키보드 뜨는 것 방지)
 
-  if(c.birth){
-    const bd = daysUntilBirthday(c.birth, today);
-    if(bd===0) showBirthdayAlert(c);
-  }
-}
-function showBirthdayAlert(c){
-  const wrap = document.createElement('div');
-  wrap.className = 'modal-bg';
-  wrap.innerHTML = `
-    <div class="modal" style="text-align:center; border-top:6px solid #F5A5B0;">
-      <div style="font-size:40px; margin:8px 0;">🎂</div>
-      <h3 style="margin:0 0 8px;">오늘 ${c.name}님 생신이에요!</h3>
-      <div class="sub" style="color:var(--muted); margin-bottom:16px;">${c.birth}${c.purchased?' · <span class="badge vip">VIP</span>':''}</div>
-      <div style="background:#FFF6F7; border:1px solid #F5C6CB; border-radius:10px; padding:12px; text-align:left; font-size:14px; margin-bottom:16px;">
-        생신 축하 인사 한마디 건네드리면 정말 좋아하실 거예요.
-      </div>
-      <button class="btn btn-primary btn-block" onclick="this.closest('.modal-bg').remove()">확인했어요</button>
-    </div>
-  `;
-  document.body.appendChild(wrap);
+  // 생일 안내는 목록의 "🎂 생일" 배지로 확인 가능. 확인 버튼이 필요한 별도 팝업은 연속 스캔을 막아서 띄우지 않음.
 }
 function refocusScan(){
   const el = document.getElementById('scanInput') || document.getElementById('globalScanInput');
@@ -1242,7 +1243,7 @@ function renderTimelineBody(){
     return `<div class="slot-card">
       <div class="slot-head"><span>🕐 ${label}</span><span class="cnt">${confirmedCount}/${list.length}명 확인</span></div>
       ${list.map(v=>`<div class="slot-name" style="${v.confirmed?'opacity:0.55;':''}">
-        <span onclick="openCustomerDetail('${v.cust.id}')" style="cursor:pointer; ${v.confirmed?'text-decoration:line-through;':''}"><span style="${v.cust.firstVisit===v.date?'background:#DCEBFC; padding:2px 6px; border-radius:6px;':''}">${v.cust.name}</span> ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge" style="background:#FDE8E8; color:#C0392B; font-weight:700;">🎟️ 3일연속</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')} ${!v.cust.purchased && (v.cust.threeManStart||v.cust.firstVisit) && v.date<=threeManEnd(v.cust) ? `<span class="badge" style="background:#E3F2FD; color:#1565C0;">🆕 3만볼트 이용가능(~${threeManEnd(v.cust)})</span>` : ''} ${v.cust.firstVisit ? (isRecentRegBadge(v.cust.firstVisit, v.date) ? `<span class="badge" style="background:#E6F1FB; color:#0C447C;">🆕 등록 ${v.cust.firstVisit}</span>` : `<span style="font-size:12px; color:var(--muted);">등록 ${v.cust.firstVisit}</span>`) : ''}</span>
+        <span onclick="openCustomerDetail('${v.cust.id}')" style="cursor:pointer; ${v.confirmed?'text-decoration:line-through;':''}"><span style="${v.cust.firstVisit===v.date?'background:#DCEBFC; padding:2px 6px; border-radius:6px;':''}">${v.cust.name}</span> ${v.cust.purchased?'<span class="badge vip">VIP</span>':''} ${isCouponDay(v.cust, v.date)?`<span class="badge" style="background:#FDE8E8; color:#C0392B; font-weight:700;">🎟️ 3일연속</span>`:''} ${(v.cust.birth && daysUntilBirthday(v.cust.birth, v.date)===0)?'<span class="badge-birthday">🎂 생일</span>':''} ${(()=>{const m=birthdayMissedDate(v.cust.birth, v.date); if(!m) return ''; const wd=['일','월','화','수','목','금','토'][new Date(m+'T00:00:00').getDay()]; return `<span class="badge-birthday">🎂 ${parseInt(m.slice(5,7),10)}/${parseInt(m.slice(8,10),10)}(${wd}) 생일이었어요</span>`;})()} ${(v.cust.calciumPurchases||[]).includes(v.date)?`<span class="badge amber">💊 오늘구매(누적${v.cust.calciumPurchases.length})</span>`:((v.cust.calciumPurchases||[]).length?`<span class="badge">💊 누적${v.cust.calciumPurchases.length}</span>`:'')} ${!v.cust.purchased && (v.cust.threeManStart||v.cust.firstVisit) && v.date<=threeManEnd(v.cust) ? `<span class="badge" style="background:#E3F2FD; color:#1565C0;">🆕 3만볼트 이용가능(~${threeManEnd(v.cust)})</span>` : ''} ${v.cust.firstVisit ? (isRecentRegBadge(v.cust.firstVisit, v.date) ? `<span class="badge" style="background:#E6F1FB; color:#0C447C;">🆕 등록 ${v.cust.firstVisit}</span>` : `<span style="font-size:12px; color:var(--muted);">등록 ${v.cust.firstVisit}</span>`) : ''}</span>
         <span style="display:flex; align-items:center; gap:8px;">
           <span class="t">${v.time||''}</span>
           <button class="btn-mini" style="background:${v.confirmed?'#7BAE7F':'#ccc'};" onclick="event.stopPropagation(); toggleVisitConfirmed('${v.cust.id}','${v.date}','${v.session}')">${v.confirmed?'✅ 확인됨':'⬜ 확인'}</button>
