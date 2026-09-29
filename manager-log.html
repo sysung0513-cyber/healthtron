@@ -179,10 +179,34 @@ async function loadCustomers(){
   const data = await res.json();
   customers = data.customers || [];
 }
+const LT_EXCLUDE_KEY = 'mgr_longterm_exclude';
+function loadLtExclude(){ try{ return JSON.parse(localStorage.getItem(LT_EXCLUDE_KEY)||'{}'); }catch(e){ return {}; } }
+function saveLtExclude(a){ localStorage.setItem(LT_EXCLUDE_KEY, JSON.stringify(a)); }
+
+// 7일 이상 결석 중이면서, 실장이 "삭제"로 제외 처리하지 않은 고객만 (최근에 결석이 시작된 순 = 결석일수 적은 순)
+function getLongtermList(today){
+  const excl = loadLtExclude();
+  return customers.map(c=>{
+    const days = consecutiveAbsentBizDays(c, today);
+    if(days < 7) return null;
+    if(excl[c.id] && excl[c.id] === (lastVisitDate(c)||'')) return null; // 삭제 후 재방문 없으면 계속 제외
+    return {c, days};
+  }).filter(Boolean).sort((a,b)=>a.days-b.days);
+}
+function removeFromLongterm(custId){
+  const c = customers.find(x=>x.id===custId);
+  if(!c) return;
+  if(!confirm(`${c.name}님을 장기명단에서 삭제할까요? (다시 7일 이상 결석하면 자동으로 다시 나타납니다)`)) return;
+  const excl = loadLtExclude();
+  excl[custId] = lastVisitDate(c) || '';
+  saveLtExclude(excl);
+  document.querySelector('.modal-bg')?.remove();
+  syncLongterm().then(renderTab);
+}
+
 async function syncLongterm(){
   const today = todayStr();
-  const active = customers.filter(c=>consecutiveAbsentBizDays(c, today) >= 7)
-    .map(c=>({id:c.id, name:c.name, phone:c.phone}));
+  const active = getLongtermList(today).map(x=>({id:x.c.id, name:x.c.name, phone:x.c.phone}));
   const res = await fetch(SHEET_API_URL, {
     method:'POST', headers:{'Content-Type':'text/plain'},
     body: JSON.stringify({action:'mgrSync', active})
@@ -225,6 +249,7 @@ async function confirmReturn(custId){
 function openDetail(custId){
   const c = customers.find(x=>x.id===custId);
   if(!c) return;
+  const isLongterm = consecutiveAbsentBizDays(c, todayStr()) >= 7;
   const wrap = document.createElement('div');
   wrap.className = 'modal-bg';
   wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
@@ -240,6 +265,7 @@ function openDetail(custId){
       <div class="row"><span>구매여부</span><span>${c.purchased?'구매(VIP)':'체험'}</span></div>
       <div class="row"><span>메모</span><span style="text-align:right; max-width:200px;">${c.memo||'-'}</span></div>
       <button class="close-btn" onclick="this.closest('.modal-bg').remove()">닫기</button>
+      ${isLongterm ? `<button class="close-btn" style="background:var(--danger); margin-top:8px;" onclick="removeFromLongterm('${c.id}')">장기명단에서 삭제</button>` : ''}
     </div>
   `;
   document.body.appendChild(wrap);
@@ -289,13 +315,10 @@ function renderFive(){
 
 function renderLongterm(){
   const today = todayStr();
-  const list = customers.map(c=>{
-    const days = consecutiveAbsentBizDays(c, today);
-    return days>=7 ? {c, days} : null;
-  }).filter(Boolean).sort((a,b)=>b.days-a.days);
+  const list = getLongtermList(today);
 
   document.getElementById('main').innerHTML = `
-    <div class="section-note">7일 이상 결석 중인 고객 전원입니다. 다시 방문하면 자동으로 "복귀확인" 탭으로 넘어갑니다.</div>
+    <div class="section-note">7일 이상 결석 중인 고객입니다. 최근에 안 나오기 시작한 분부터 위에 보입니다. 다시 방문하면 자동으로 "복귀확인" 탭으로 넘어갑니다.</div>
     ${list.length ? list.map(x=>`
       <div class="item ${x.days>=30?'tier-30':'tier-7'}">
         <div class="top">
