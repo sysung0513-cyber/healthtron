@@ -702,6 +702,11 @@ function renderHome(){
   const calciumThisMonthCustomers = customers.filter(c=>(c.calciumPurchases||[]).some(d=>d.startsWith(thisMonthPrefix)));
   const calciumThisMonthCount = customers.reduce((sum,c)=>sum+(c.calciumPurchases||[]).filter(d=>d.startsWith(thisMonthPrefix)).length, 0);
 
+  const returnedRisk = todayVisitors.map(c=>{
+    const rt = riskTierForCustomer(c);
+    return rt ? {c, rt} : null;
+  }).filter(Boolean);
+
   const statBlock = (title, s) => `
     <div class="card">
       <h3>${title}</h3>
@@ -719,6 +724,18 @@ function renderHome(){
     ${statBlock('① 오늘 총 인원', todayStat)}
     ${statBlock('② 오전 총 인원', amStat)}
     ${statBlock('③ 오후 총 인원', pmStat)}
+
+    <div class="card" style="border:2px solid #F5C6CB; background:#FFF6F7;">
+      <h3>🚦 관리대상 고객 오늘 복귀 (${returnedRisk.length}명)</h3>
+      <div class="list-scroll">
+      ${returnedRisk.length ? returnedRisk.map(x=>`
+        <div class="row">
+          <span class="name" onclick="openCustomerDetail('${x.c.id}')" style="cursor:pointer; text-decoration:underline;">${x.c.name} <span class="sub">${x.c.phone||''}</span></span>
+          <span class="badge" style="background:${x.rt.bg}; color:${x.rt.fg}; font-weight:700;">${x.rt.label} 이탈위험 → 복귀</span>
+        </div>
+      `).join('') : '<div class="empty">오늘 복귀한 관리대상 고객이 없어요</div>'}
+      </div>
+    </div>
 
     <div class="card">
       <h3>④ 어제 등록한 신규 고객 (${newYesterday.length}명)</h3>
@@ -738,13 +755,6 @@ function renderHome(){
       <h3>⑤ 오늘 등록한 신규 고객 (${newToday.length}명)</h3>
       <div class="list-scroll">
       ${newToday.length ? newToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="sub">${c.phone}</span></div>`).join('') : '<div class="empty">오늘 등록한 신규 고객이 없어요</div>'}
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>⑥ 오늘 출석한 VIP (${vipToday.length}명)</h3>
-      <div class="list-scroll">
-      ${vipToday.length ? vipToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="badge vip">VIP</span></div>`).join('') : '<div class="empty">오늘 출석한 VIP가 없어요</div>'}
       </div>
     </div>
 
@@ -772,6 +782,13 @@ function renderHome(){
     <div class="card">
       <h3>💊 ⑩ 이 달 누적 칼슘 구입 고객수</h3>
       <div class="row"><span class="sub">${thisMonthPrefix} 칼슘 구입 고객</span><span class="badge amber">${calciumThisMonthCustomers.length}명 (총 ${calciumThisMonthCount}개)</span></div>
+    </div>
+
+    <div class="card">
+      <h3>⑥ 오늘 출석한 VIP (${vipToday.length}명)</h3>
+      <div class="list-scroll">
+      ${vipToday.length ? vipToday.map(c=>`<div class="row"><span class="name">${c.name}</span><span class="badge vip">VIP</span></div>`).join('') : '<div class="empty">오늘 출석한 VIP가 없어요</div>'}
+      </div>
     </div>
     </div>
   `;

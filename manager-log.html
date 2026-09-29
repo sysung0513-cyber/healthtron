@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>실장 업무일지</title>
+<style>
+  :root{
+    --bg:#F5FAF8; --card:#FFFFFF; --primary:#1B6B63; --primary-dark:#124F49;
+    --accent:#D98E3D; --success:#2F8F7A; --success-bg:#E5F3EF;
+    --danger:#C0392B; --danger-bg:#FDEDEC;
+    --text:#24312E; --text-soft:#657873; --border:#DCEAE6; --muted:#96a5a1;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; background:var(--bg); font-family:"Apple SD Gothic Neo","Malgun Gothic","Pretendard",sans-serif; color:var(--text);}
+  header{background:var(--primary); color:#fff; padding:16px 20px;}
+  header h1{font-size:18px; margin:0; font-weight:800;}
+  header .sub{font-size:12.5px; opacity:0.85;}
+  .wrap{max-width:640px; margin:0 auto; padding:16px 16px 60px;}
+  .tabbar{display:flex; gap:6px; margin-bottom:14px;}
+  .tabbar button{
+    flex:1; border:none; border-radius:10px; padding:10px 4px; font-size:12.5px; font-weight:700; cursor:pointer;
+    background:#fff; color:var(--text-soft); border:1px solid var(--border);
+  }
+  .tabbar button.active{background:var(--primary); color:#fff; border-color:var(--primary);}
+  .card{background:var(--card); border-radius:16px; padding:16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(27,107,99,0.06);}
+  .section-note{font-size:12px; color:var(--text-soft); margin-bottom:12px;}
+  .item{border-radius:14px; padding:14px; margin-bottom:10px; background:#FBFDFC; border:1px solid var(--border);}
+  .item.done{opacity:0.5;}
+  .item .top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .item .name{font-weight:800; font-size:15px; cursor:pointer; text-decoration:underline;}
+  .item .phone{color:var(--text-soft); font-size:12.5px; font-weight:400; text-decoration:none;}
+  .item .meta{font-size:12.5px; margin:4px 0 10px;}
+  .tier-2 .meta{color:#B7950B;}
+  .tier-7 .meta{color:var(--accent);}
+  .tier-30 .meta{color:var(--danger);}
+  .result-row{display:flex; gap:6px; flex-wrap:wrap;}
+  .result-btn{
+    font-size:12px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+    background:#fff; cursor:pointer; color:var(--text);
+  }
+  .result-btn.picked{background:var(--success-bg); border-color:var(--success); color:var(--success); font-weight:700;}
+  .done-tag{font-size:12px; color:var(--success); font-weight:700;}
+  .empty{color:var(--muted); font-size:13.5px; text-align:center; padding:20px 0;}
+  .return-item{background:var(--success-bg); border:1px solid var(--success); border-radius:14px; padding:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:10px;}
+  .return-item .name{font-weight:800; font-size:15px; cursor:pointer; text-decoration:underline;}
+  .return-item .meta{font-size:12px; color:var(--success);}
+  .confirm-btn{background:var(--success); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer; flex-shrink:0;}
+  .month-nav{display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:14px;}
+  .month-nav button{border:none; background:var(--border); color:var(--primary-dark); width:32px; height:32px; border-radius:8px; font-size:16px; cursor:pointer;}
+  .month-nav .label{font-size:15px; font-weight:800;}
+  .stat-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:14px;}
+  .stat-box{background:var(--success-bg); border-radius:12px; padding:14px; text-align:center;}
+  .stat-box .n{font-size:22px; font-weight:800; color:var(--primary-dark);}
+  .stat-box .l{font-size:12px; color:var(--text-soft); margin-top:2px;}
+  .breakdown-row{display:flex; justify-content:space-between; padding:8px 0; border-top:1px solid var(--border); font-size:13.5px;}
+  .breakdown-row:first-child{border-top:none;}
+  .loading{text-align:center; padding:40px 0; color:var(--muted);}
+
+  .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px;}
+  .modal{background:#fff; border-radius:16px; padding:22px; max-width:360px; width:100%; max-height:80vh; overflow-y:auto;}
+  .modal h3{margin:0 0 12px;}
+  .modal .row{display:flex; justify-content:space-between; padding:7px 0; border-top:1px solid var(--border); font-size:14px;}
+  .modal .row:first-of-type{border-top:none;}
+  .modal .close-btn{margin-top:16px; width:100%; padding:12px; border:none; border-radius:10px; background:var(--primary); color:#fff; font-weight:700; font-size:14px; cursor:pointer;}
+</style>
+</head>
+<body>
+<header>
+  <h1>실장 업무일지</h1>
+  <div class="sub">관리대상 고객 통화 체크리스트</div>
+</header>
+
+<div class="wrap">
+  <div class="tabbar">
+    <button class="tabbtn active" data-tab="five">오늘 5명</button>
+    <button class="tabbtn" data-tab="longterm">장기명단</button>
+    <button class="tabbtn" data-tab="returns">복귀확인</button>
+    <button class="tabbtn" data-tab="stats">통계</button>
+  </div>
+  <div id="main"><div class="loading">불러오는 중...</div></div>
+</div>
+
+<script>
+/* ===== 설정: desk.html·teacher.html과 같은 백엔드(구글시트) 사용 ===== */
+const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbym1g8ZfBYe9PitQpWaRnRePm5_PEf_l8juk4cMekcwuELZ5AEyTOEG0qjR8r9X0g2I/exec";
+
+/* ===== 날짜·영업일 유틸 (desk.html과 동일한 로직) ===== */
+function todayStr(){
+  const parts = new Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
+  const get = t => parts.find(p=>p.type===t)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function toLocalDateStr(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function addDaysStr(dateStr, n){
+  let d = new Date(dateStr+'T00:00:00');
+  if(isNaN(d.getTime())) d = new Date(todayStr()+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return toLocalDateStr(d);
+}
+// ⚠️ 매년 1월 초, 다음 해 공휴일 날짜로 갱신 필요 (desk.html·teacher.html과 같은 목록으로 유지)
+const HOLIDAYS_2026 = new Set([
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-02',
+  '2026-05-05','2026-05-25','2026-07-17','2026-08-15','2026-08-17',
+  '2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05',
+  '2026-10-09','2026-12-25',
+]);
+function isBusinessDay(dateStr){
+  const day = new Date(dateStr+'T00:00:00').getDay();
+  if(day===0 || day===6) return false;
+  if(HOLIDAYS_2026.has(dateStr)) return false;
+  return true;
+}
+function previousBusinessDay(dateStr){
+  let d = dateStr;
+  for(let i=0;i<14;i++){ d = addDaysStr(d,-1); if(isBusinessDay(d)) return d; }
+  return d;
+}
+function lastVisitDate(c){
+  if(!c.visits || !c.visits.length) return c.firstVisit || null;
+  return c.visits.reduce((max,v)=> v.date>max ? v.date : max, c.visits[0].date);
+}
+// 오늘은 제외하고, 어제(직전 영업일)부터 거슬러 올라가며 연속으로 결석한 영업일 수
+function consecutiveAbsentBizDays(c, today){
+  if(!c.firstVisit) return 0;
+  const visitDates = new Set((c.visits||[]).map(v=>v.date));
+  let count = 0;
+  let d = previousBusinessDay(today);
+  let guard = 0;
+  while(guard++ < 400){
+    if(d < c.firstVisit) break;
+    if(visitDates.has(d)) break;
+    count++;
+    d = previousBusinessDay(d);
+  }
+  return count;
+}
+function tierOf(days){
+  if(days>=30) return {key:'30일', cls:'tier-30'};
+  if(days>=7) return {key:'7일', cls:'tier-7'};
+  if(days>=2) return {key:'2일', cls:'tier-2'};
+  return null;
+}
+
+/* ===== 상태 ===== */
+let customers = [];
+let mgrState = []; // 서버의 장기명단 상태 (active/returned)
+let currentTab = 'five';
+let statsMonth = todayStr().slice(0,7);
+const FIVE_ACK_KEY = 'mgr_five_ack';
+
+function loadFiveAck(){ try{ return JSON.parse(localStorage.getItem(FIVE_ACK_KEY)||'{}'); }catch(e){ return {}; } }
+function saveFiveAck(a){ localStorage.setItem(FIVE_ACK_KEY, JSON.stringify(a)); }
+
+/* ===== 데이터 로드 ===== */
+async function loadCustomers(){
+  const res = await fetch(`${SHEET_API_URL}?action=list`);
+  const data = await res.json();
+  customers = data.customers || [];
+}
+async function syncLongterm(){
+  const today = todayStr();
+  const active = customers.filter(c=>consecutiveAbsentBizDays(c, today) >= 7)
+    .map(c=>({id:c.id, name:c.name, phone:c.phone}));
+  const res = await fetch(SHEET_API_URL, {
+    method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({action:'mgrSync', active})
+  });
+  const data = await res.json();
+  mgrState = data.state || [];
+}
+async function logCall(type, c, result, btn){
+  btn.closest('.result-row').querySelectorAll('.result-btn').forEach(b=>b.classList.remove('picked'));
+  btn.classList.add('picked');
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action:'mgrLogCall', type, custId:c.id, name:c.name, phone:c.phone, result})
+    });
+  }catch(e){}
+}
+async function ackFive(c){
+  const acks = loadFiveAck();
+  acks[c.id] = lastVisitDate(c) || '';
+  saveFiveAck(acks);
+  renderTab();
+}
+async function confirmReturn(custId){
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action:'mgrConfirmReturn', custId})
+    });
+  }catch(e){}
+  await syncLongterm();
+  renderTab();
+}
+
+/* ===== 고객 상세 (읽기 전용) ===== */
+function openDetail(custId){
+  const c = customers.find(x=>x.id===custId);
+  if(!c) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  wrap.innerHTML = `
+    <div class="modal">
+      <h3>${c.name}</h3>
+      <div class="row"><span>전화번호</span><span>${c.phone||'-'}</span></div>
+      <div class="row"><span>등록일</span><span>${c.firstVisit||'-'}</span></div>
+      <div class="row"><span>생년월일</span><span>${c.birth||'-'}</span></div>
+      <div class="row"><span>건강태그</span><span>${c.healthTag||'-'}</span></div>
+      <div class="row"><span>추천인</span><span>${c.referrer||'-'}</span></div>
+      <div class="row"><span>최근 방문</span><span>${lastVisitDate(c)||'-'}</span></div>
+      <div class="row"><span>구매여부</span><span>${c.purchased?'구매(VIP)':'체험'}</span></div>
+      <div class="row"><span>메모</span><span style="text-align:right; max-width:200px;">${c.memo||'-'}</span></div>
+      <button class="close-btn" onclick="this.closest('.modal-bg').remove()">닫기</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+}
+
+/* ===== 렌더링 ===== */
+function resultButtons(type, c){
+  const results = ['연결됨','부재중','재방문의사','문자발송'];
+  return `<div class="result-row">${results.map(r=>`<button class="result-btn" onclick="logCall('${type}', ${JSON.stringify(c).replace(/"/g,'&quot;')}, '${r}', this)">${r}</button>`).join('')}</div>`;
+}
+
+function renderFive(){
+  const today = todayStr();
+  const acks = loadFiveAck();
+  const withTier = customers.map(c=>{
+    const days = consecutiveAbsentBizDays(c, today);
+    const tier = tierOf(days);
+    if(!tier) return null;
+    const acked = acks[c.id] && acks[c.id] === (lastVisitDate(c)||'');
+    return {c, days, tier, acked};
+  }).filter(Boolean);
+
+  const b2 = withTier.filter(x=>x.tier.key==='2일' && !x.acked).sort((a,b)=>b.days-a.days);
+  const b7 = withTier.filter(x=>x.tier.key==='7일' && !x.acked).sort((a,b)=>b.days-a.days);
+  const b30 = withTier.filter(x=>x.tier.key==='30일' && !x.acked).sort((a,b)=>b.days-a.days);
+  const picked = [...b2, ...b7, ...b30].slice(0,5);
+
+  const html = `
+    <div class="section-note">2일 연속 결석 → 7일 이상 → 30일 이상 순으로 채운 오늘의 통화 대상입니다. 처리(체크)하면 목록에서 빠지고, 그 고객이 다시 방문하면 자동으로 초기화됩니다.</div>
+    ${picked.length ? picked.map(x=>`
+      <div class="item ${x.tier.cls}">
+        <div class="top">
+          <div>
+            <span class="name" onclick="openDetail('${x.c.id}')">${x.c.name}</span> <span class="phone">${x.c.phone||''}</span>
+            <div class="meta">${x.tier.key} 연속 결석 (영업일 ${x.days}일째) · 등록 ${x.c.firstVisit||'-'}</div>
+          </div>
+          <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text-soft); flex-shrink:0;">
+            <input type="checkbox" onchange="ackFive(${JSON.stringify(x.c).replace(/"/g,'&quot;')})"> 처리완료
+          </label>
+        </div>
+        ${resultButtons('five', x.c)}
+      </div>
+    `).join('') : '<div class="empty">오늘 통화할 대상이 없어요 🎉</div>'}
+  `;
+  document.getElementById('main').innerHTML = html;
+}
+
+function renderLongterm(){
+  const today = todayStr();
+  const list = customers.map(c=>{
+    const days = consecutiveAbsentBizDays(c, today);
+    return days>=7 ? {c, days} : null;
+  }).filter(Boolean).sort((a,b)=>b.days-a.days);
+
+  document.getElementById('main').innerHTML = `
+    <div class="section-note">7일 이상 결석 중인 고객 전원입니다. 다시 방문하면 자동으로 "복귀확인" 탭으로 넘어갑니다.</div>
+    ${list.length ? list.map(x=>`
+      <div class="item ${x.days>=30?'tier-30':'tier-7'}">
+        <div class="top">
+          <div>
+            <span class="name" onclick="openDetail('${x.c.id}')">${x.c.name}</span> <span class="phone">${x.c.phone||''}</span>
+            <div class="meta">영업일 ${x.days}일째 미방문 · 등록 ${x.c.firstVisit||'-'}</div>
+          </div>
+        </div>
+        ${resultButtons('longterm', x.c)}
+      </div>
+    `).join('') : '<div class="empty">7일 이상 결석 중인 고객이 없어요</div>'}
+  `;
+}
+
+function renderReturns(){
+  const returned = mgrState.filter(s=>s.status==='returned');
+  document.getElementById('main').innerHTML = `
+    <div class="section-note">장기 관리 명단이었다가 다시 방문한 고객입니다. 확인을 누르면 목록에서 사라집니다.</div>
+    ${returned.length ? returned.map(s=>`
+      <div class="return-item">
+        <div>
+          <span class="name" onclick="openDetail('${s.id}')">${s.name}</span>
+          <div class="meta">${s.phone||''} · 다시 방문했어요</div>
+        </div>
+        <button class="confirm-btn" onclick="confirmReturn('${s.id}')">확인</button>
+      </div>
+    `).join('') : '<div class="empty">복귀 확인할 고객이 없어요</div>'}
+  `;
+}
+
+async function renderStats(){
+  document.getElementById('main').innerHTML = '<div class="loading">불러오는 중...</div>';
+  let data = {counts:{total:0,byResult:{},byType:{}}, returns:0};
+  try{
+    const res = await fetch(`${SHEET_API_URL}?action=mgrStats&month=${statsMonth}`);
+    data = await res.json();
+  }catch(e){}
+  const [y,m] = statsMonth.split('-').map(Number);
+  const results = ['연결됨','부재중','재방문의사','문자발송'];
+  document.getElementById('main').innerHTML = `
+    <div class="month-nav">
+      <button onclick="shiftStatsMonth(-1)">‹</button>
+      <div class="label">${y}년 ${m}월</div>
+      <button onclick="shiftStatsMonth(1)">›</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="n">${data.counts.total||0}</div><div class="l">이번달 통화·문자 건수</div></div>
+      <div class="stat-box"><div class="n">${data.returns||0}</div><div class="l">복귀 성공 인원</div></div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 4px; font-size:14px;">통화결과 분포</h3>
+      ${results.map(r=>`<div class="breakdown-row"><span>${r}</span><span>${(data.counts.byResult||{})[r]||0}건</span></div>`).join('')}
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 4px; font-size:14px;">유형별 건수</h3>
+      <div class="breakdown-row"><span>오늘 5명</span><span>${(data.counts.byType||{}).five||0}건</span></div>
+      <div class="breakdown-row"><span>장기명단</span><span>${(data.counts.byType||{}).longterm||0}건</span></div>
+    </div>
+  `;
+}
+function shiftStatsMonth(delta){
+  let [y,m] = statsMonth.split('-').map(Number);
+  m += delta;
+  if(m<1){m=12;y--;} if(m>12){m=1;y++;}
+  statsMonth = `${y}-${String(m).padStart(2,'0')}`;
+  renderStats();
+}
+
+function renderTab(){
+  document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
+  if(currentTab==='five') renderFive();
+  else if(currentTab==='longterm') renderLongterm();
+  else if(currentTab==='returns') renderReturns();
+  else if(currentTab==='stats') renderStats();
+}
+
+document.querySelectorAll('.tabbtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{ currentTab = btn.dataset.tab; renderTab(); });
+});
+
+async function init(){
+  await loadCustomers();
+  await syncLongterm();
+  renderTab();
+}
+init();
+</script>
+</body>
+</html>
