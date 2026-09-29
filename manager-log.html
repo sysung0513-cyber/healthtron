@@ -57,6 +57,23 @@
   .breakdown-row:first-child{border-top:none;}
   .loading{text-align:center; padding:40px 0; color:var(--muted);}
 
+  .subpills{display:flex; gap:6px; margin-bottom:12px;}
+  .subpills button{flex:1; border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 4px; font-size:12px; font-weight:700; color:var(--text-soft); cursor:pointer;}
+  .subpills button.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .add-btn{width:100%; border:none; border-radius:12px; padding:12px; background:var(--primary); color:#fff; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:14px;}
+  .imp-item{background:#FBFDFC; border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:10px;}
+  .imp-item .note{font-size:13.5px; margin:6px 0 10px; white-space:pre-wrap; color:var(--text);}
+  .imp-item .meta2{font-size:11.5px; color:var(--muted); margin-bottom:8px;}
+  .imp-actions{display:flex; gap:6px; flex-wrap:wrap;}
+  .imp-actions button{font-size:12px; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; cursor:pointer;}
+  .imp-actions .done-purchase{border-color:var(--success); color:var(--success);}
+  .imp-actions .done-general{border-color:var(--accent); color:var(--accent);}
+  .imp-actions .del{border-color:var(--danger); color:var(--danger);}
+  .search-box{width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; font-size:14px; margin-bottom:10px;}
+  .search-result{padding:10px; border-bottom:1px solid var(--border); cursor:pointer;}
+  .search-result:hover{background:var(--success-bg);}
+  .note-input{width:100%; min-height:70px; border:1px solid var(--border); border-radius:10px; padding:10px; font-size:14px; font-family:inherit; margin:10px 0;}
+
   .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px;}
   .modal{background:#fff; border-radius:16px; padding:22px; max-width:360px; width:100%; max-height:80vh; overflow-y:auto;}
   .modal h3{margin:0 0 12px;}
@@ -77,6 +94,7 @@
     <button class="tabbtn" data-tab="longterm">장기명단</button>
     <button class="tabbtn" data-tab="returns">복귀확인</button>
     <button class="tabbtn" data-tab="stats">통계</button>
+    <button class="tabbtn" data-tab="important">중요고객</button>
   </div>
   <div id="main"><div class="loading">불러오는 중...</div></div>
 </div>
@@ -172,7 +190,9 @@ async function syncLongterm(){
   const data = await res.json();
   mgrState = data.state || [];
 }
-async function logCall(type, c, result, btn){
+async function logCall(type, custId, result, btn){
+  const c = customers.find(x=>x.id===custId);
+  if(!c) return;
   btn.closest('.result-row').querySelectorAll('.result-btn').forEach(b=>b.classList.remove('picked'));
   btn.classList.add('picked');
   try{
@@ -182,7 +202,9 @@ async function logCall(type, c, result, btn){
     });
   }catch(e){}
 }
-async function ackFive(c){
+async function ackFive(custId){
+  const c = customers.find(x=>x.id===custId);
+  if(!c) return;
   const acks = loadFiveAck();
   acks[c.id] = lastVisitDate(c) || '';
   saveFiveAck(acks);
@@ -226,7 +248,7 @@ function openDetail(custId){
 /* ===== 렌더링 ===== */
 function resultButtons(type, c){
   const results = ['연결됨','부재중','재방문의사','문자발송'];
-  return `<div class="result-row">${results.map(r=>`<button class="result-btn" onclick="logCall('${type}', ${JSON.stringify(c).replace(/"/g,'&quot;')}, '${r}', this)">${r}</button>`).join('')}</div>`;
+  return `<div class="result-row">${results.map(r=>`<button class="result-btn" onclick="logCall('${type}', '${c.id}', '${r}', this)">${r}</button>`).join('')}</div>`;
 }
 
 function renderFive(){
@@ -255,7 +277,7 @@ function renderFive(){
             <div class="meta">${x.tier.key} 연속 결석 (영업일 ${x.days}일째) · 등록 ${x.c.firstVisit||'-'}</div>
           </div>
           <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text-soft); flex-shrink:0;">
-            <input type="checkbox" onchange="ackFive(${JSON.stringify(x.c).replace(/"/g,'&quot;')})"> 처리완료
+            <input type="checkbox" onchange="ackFive('${x.c.id}')"> 처리완료
           </label>
         </div>
         ${resultButtons('five', x.c)}
@@ -342,12 +364,164 @@ function shiftStatsMonth(delta){
   renderStats();
 }
 
+/* ===== 중요고객 ===== */
+let importantList = [];
+let importantView = 'active';
+
+async function loadImportant(){
+  try{
+    const res = await fetch(`${SHEET_API_URL}?action=mgrGetImportant`);
+    const data = await res.json();
+    importantList = data.important || [];
+  }catch(e){ importantList = []; }
+}
+function setImportantView(v){ importantView = v; renderImportantList(); }
+
+function renderImportantList(){
+  const filtered = importantList.filter(x=>x.status===importantView).sort((a,b)=> (b.addedDate||'').localeCompare(a.addedDate||''));
+  const box = document.getElementById('importantListBox');
+  if(!box) return;
+  box.innerHTML = filtered.length ? filtered.map(x=>`
+    <div class="imp-item">
+      <span class="name" onclick="openDetail('${x.custId}')">${x.name}</span> <span class="phone">${x.phone||''}</span>
+      <div class="meta2">등록 ${x.addedDate}${x.doneDate?` · 완료 ${x.doneDate}`:''}</div>
+      <div class="note">${x.note ? x.note.replace(/&/g,'&amp;').replace(/</g,'&lt;') : '(메모 없음)'}</div>
+      <div class="imp-actions">
+        ${importantView==='active' ? `
+          <button onclick="editImportantNote('${x.id}')">메모수정</button>
+          <button class="done-purchase" onclick="completeImportant('${x.id}','purchase')">✅ 구입으로 완료</button>
+          <button class="done-general" onclick="completeImportant('${x.id}','general')">✅ 구입 외 완료</button>
+        ` : ''}
+        <button class="del" onclick="deleteImportant('${x.id}')">삭제</button>
+      </div>
+    </div>
+  `).join('') : '<div class="empty">해당하는 고객이 없어요</div>';
+}
+
+function renderImportant(){
+  document.getElementById('main').innerHTML = `
+    <div class="section-note">결석 여부와 상관없이 실장님이 직접 챙기는 고객 목록입니다.</div>
+    <button class="add-btn" onclick="openAddImportantModal()">+ 중요고객 추가</button>
+    <div class="subpills">
+      <button class="${importantView==='active'?'active':''}" onclick="setImportantView('active')">진행중</button>
+      <button class="${importantView==='done_general'?'active':''}" onclick="setImportantView('done_general')">처리완료</button>
+      <button class="${importantView==='done_purchase'?'active':''}" onclick="setImportantView('done_purchase')">구입고객</button>
+    </div>
+    <div id="importantListBox"></div>
+  `;
+  renderImportantList();
+}
+
+function openAddImportantModal(){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  wrap.innerHTML = `
+    <div class="modal">
+      <h3>중요고객 추가</h3>
+      <input type="text" class="search-box" id="impSearchInput" placeholder="이름 또는 전화번호 검색" oninput="renderImpSearchResults(this.value)">
+      <div id="impSearchResults"></div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  document.getElementById('impSearchInput').focus();
+}
+function renderImpSearchResults(q){
+  const box = document.getElementById('impSearchResults');
+  if(!q || q.trim().length < 1){ box.innerHTML=''; return; }
+  const query = q.trim();
+  const matches = customers.filter(c => (c.name && c.name.includes(query)) || (c.phone && c.phone.includes(query))).slice(0,20);
+  box.innerHTML = matches.length ? matches.map(c=>`
+    <div class="search-result" onclick="pickImportantCustomer('${c.id}')">
+      <b>${c.name}</b> <span class="phone">${c.phone||''}</span>
+    </div>
+  `).join('') : '<div class="empty">검색 결과가 없어요</div>';
+}
+function pickImportantCustomer(custId){
+  const c = customers.find(x=>x.id===custId);
+  if(!c) return;
+  document.querySelector('.modal-bg .modal').innerHTML = `
+    <h3>${c.name} <span class="phone">${c.phone||''}</span></h3>
+    <textarea class="note-input" id="impNoteInput" placeholder="챙겨야 할 이유나 내용을 적어주세요"></textarea>
+    <button class="close-btn" onclick="saveImportantCustomer('${c.id}')">저장</button>
+  `;
+  document.getElementById('impNoteInput').focus();
+}
+async function saveImportantCustomer(custId){
+  const c = customers.find(x=>x.id===custId);
+  const note = document.getElementById('impNoteInput').value.trim();
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action:'mgrAddImportant', custId:c.id, name:c.name, phone:c.phone, note})
+    });
+  }catch(e){}
+  document.querySelector('.modal-bg').remove();
+  await loadImportant();
+  renderImportantList();
+}
+function editImportantNote(id){
+  const item = importantList.find(x=>x.id===id);
+  if(!item) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-bg';
+  wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  const h3 = document.createElement('h3'); h3.textContent = '메모 수정';
+  const textarea = document.createElement('textarea');
+  textarea.className = 'note-input';
+  textarea.id = 'editNoteInput';
+  textarea.value = item.note || '';
+  const btn = document.createElement('button');
+  btn.className = 'close-btn';
+  btn.textContent = '저장';
+  btn.onclick = ()=>saveEditedNote(id);
+  modal.appendChild(h3); modal.appendChild(textarea); modal.appendChild(btn);
+  wrap.appendChild(modal);
+  document.body.appendChild(wrap);
+}
+async function saveEditedNote(id){
+  const note = document.getElementById('editNoteInput').value.trim();
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action:'mgrUpdateImportantNote', id, note})
+    });
+  }catch(e){}
+  document.querySelector('.modal-bg').remove();
+  await loadImportant();
+  renderImportantList();
+}
+async function completeImportant(id, outcome){
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action:'mgrCompleteImportant', id, outcome})
+    });
+  }catch(e){}
+  await loadImportant();
+  renderImportantList();
+}
+async function deleteImportant(id){
+  if(!confirm('이 고객을 목록에서 삭제할까요?')) return;
+  try{
+    await fetch(SHEET_API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({action:'mgrDeleteImportant', id})
+    });
+  }catch(e){}
+  await loadImportant();
+  renderImportantList();
+}
+
 function renderTab(){
   document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   if(currentTab==='five') renderFive();
   else if(currentTab==='longterm') renderLongterm();
   else if(currentTab==='returns') renderReturns();
   else if(currentTab==='stats') renderStats();
+  else if(currentTab==='important'){ renderImportant(); loadImportant().then(renderImportantList); }
 }
 
 document.querySelectorAll('.tabbtn').forEach(btn=>{
