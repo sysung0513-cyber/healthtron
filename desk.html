@@ -1331,51 +1331,8 @@ function statRangeLabel(){
   return statYear;
 }
 
-/* ---------------- 통계 탭 맨 위: 월별 소개 고객 (한 명 이상 소개한 고객) ---------------- */
-function renderReferralCard(){
-  const box = document.getElementById('referralCard');
-  if(!box) return;
-  // 월(소개받은 고객의 등록월) → 소개자 → 소개받고 온 고객들
-  const byMonth = {};
-  customers.forEach(c=>{
-    const ref = (c.referrer||'').trim();
-    if(!ref || !c.firstVisit) return;
-    const ym = c.firstVisit.slice(0,7);
-    ((byMonth[ym] = byMonth[ym] || {})[ref] = byMonth[ym][ref] || []).push(c);
-  });
-  const months = Object.keys(byMonth).sort((a,b)=>b.localeCompare(a)); // 최근 달부터
-  const nameLink = (c, txt) => c ? `<span onclick="openCustomerDetail('${c.id}')" style="cursor:pointer;">${txt}</span>` : txt;
-
-  box.innerHTML = `
-    <div class="card" style="margin-bottom:14px;">
-      <h3>🤝 월별 소개 고객</h3>
-      <div class="list-scroll">
-      ${months.length ? months.map(ym=>{
-        const rows = Object.keys(byMonth[ym]).map(ref=>({
-          ref, introducer: customers.find(x=>x.name.trim()===ref), list: byMonth[ym][ref]
-        })).sort((a,b)=> b.list.length-a.list.length || a.ref.localeCompare(b.ref));
-        return `
-          <div style="font-weight:700; margin:12px 0 6px;">${ym.slice(0,4)}년 ${parseInt(ym.slice(5,7),10)}월</div>
-          <div style="display:flex; font-size:12px; color:var(--muted); padding:4px 0; border-bottom:1px solid var(--line, #eee);">
-            <span style="flex:0 0 84px;">이름</span><span style="flex:0 0 64px;">소개한 수</span><span style="flex:1;">소개받고 온 고객</span>
-          </div>
-          ${rows.map(r=>`
-            <div style="display:flex; padding:8px 0; border-bottom:1px solid var(--line, #eee); font-size:14px;">
-              <span style="flex:0 0 84px; font-weight:700;">${nameLink(r.introducer, r.ref)}</span>
-              <span style="flex:0 0 64px;">${r.list.length}명</span>
-              <span style="flex:1; color:var(--muted);">${r.list.map(c=>nameLink(c, c.name)).join(', ')}</span>
-            </div>
-          `).join('')}
-        `;
-      }).join('') : '<div class="empty">소개로 등록한 고객이 없어요</div>'}
-      </div>
-    </div>
-  `;
-}
-
 function renderStats(){
   document.getElementById('main').innerHTML = `
-    <div id="referralCard"></div>
     <h2 class="section-title">기간별 통계</h2>
     <div class="session-pick">
       <button class="${statMode==='day'?'sel':''}" onclick="setStatMode('day')">일별</button>
@@ -1395,7 +1352,6 @@ function renderStats(){
     </div>
     <div id="statsBody"></div>
   `;
-  renderReferralCard();
   renderStatsBody();
 }
 function setStatMode(m){ statMode = m; renderStats(); }

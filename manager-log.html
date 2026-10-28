@@ -96,6 +96,7 @@
     <button class="tabbtn" data-tab="returns">복귀확인</button>
     <button class="tabbtn" data-tab="stats">통계</button>
     <button class="tabbtn" data-tab="important">리스트</button>
+    <button class="tabbtn" data-tab="referral">소개</button>
   </div>
   <div id="main"><div class="loading">불러오는 중...</div></div>
 </div>
@@ -623,6 +624,56 @@ function renderNewcust(){
   `;
 }
 
+/* ===== 소개 (월별 소개한 고객) ===== */
+let referralSelMonth = null;
+let referralShowAll = false;
+function setReferralMonth(ym){ referralSelMonth = ym; renderReferral(); }
+function toggleReferralAll(){ referralShowAll = !referralShowAll; renderReferral(); }
+function renderReferral(){
+  // 월(소개받은 고객의 등록월) → 소개자 → 소개받고 온 고객들
+  const byMonth = {};
+  customers.forEach(c=>{
+    const ref = (c.referrer||'').trim();
+    if(!ref || !c.firstVisit) return;
+    const ym = c.firstVisit.slice(0,7);
+    ((byMonth[ym] = byMonth[ym] || {})[ref] = byMonth[ym][ref] || []).push(c);
+  });
+  const months = Object.keys(byMonth).sort((a,b)=>b.localeCompare(a));
+  if(!months.length){
+    document.getElementById('main').innerHTML = '<div class="empty">소개로 등록한 고객이 없어요</div>';
+    return;
+  }
+  if(!referralSelMonth || !byMonth[referralSelMonth]) referralSelMonth = months[0];
+  const visibleMonths = referralShowAll ? months : months.slice(0,6);
+  const nameLink = (c, txt) => c ? `<span onclick="openDetail('${c.id}')" style="cursor:pointer; text-decoration:underline;">${txt}</span>` : txt;
+  const rows = Object.keys(byMonth[referralSelMonth]).map(ref=>({
+    ref, introducer: customers.find(x=>x.name.trim()===ref), list: byMonth[referralSelMonth][ref]
+  })).sort((a,b)=> b.list.length-a.list.length || a.ref.localeCompare(b.ref));
+
+  document.getElementById('main').innerHTML = `
+    <div class="section-note">월을 누르면 그 달에 소개한 고객이 나옵니다. (소개받은 고객의 등록월 기준)</div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+      ${visibleMonths.map(ym=>`
+        <button onclick="setReferralMonth('${ym}')" style="padding:8px 12px; font-size:12.5px; border-radius:8px; cursor:pointer; border:1px solid ${ym===referralSelMonth?'var(--primary)':'var(--border)'}; background:${ym===referralSelMonth?'var(--primary)':'#fff'}; color:${ym===referralSelMonth?'#fff':'var(--text)'};">
+          ${ym} <span style="opacity:.75;">(${Object.keys(byMonth[ym]).length}명)</span>
+        </button>`).join('')}
+      ${months.length>6 ? `<button onclick="toggleReferralAll()" style="padding:8px 12px; font-size:12.5px; border-radius:8px; cursor:pointer; border:1px solid var(--border); background:#fff; color:var(--text-soft);">${referralShowAll?'접기 ▴':'더 이전 ▾'}</button>` : ''}
+    </div>
+    <div style="font-weight:800; margin-bottom:8px;">${referralSelMonth.slice(0,4)}년 ${parseInt(referralSelMonth.slice(5,7),10)}월</div>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div style="display:flex; padding:9px 14px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--border);">
+        <span style="flex:0 0 84px;">이름</span><span style="flex:0 0 64px;">소개한 수</span><span style="flex:1;">소개받고 온 고객</span>
+      </div>
+      ${rows.map(r=>`
+        <div style="display:flex; padding:11px 14px; font-size:14px; border-bottom:1px solid var(--border);">
+          <span style="flex:0 0 84px; font-weight:800;">${nameLink(r.introducer, r.ref)}</span>
+          <span style="flex:0 0 64px;">${r.list.length}명</span>
+          <span style="flex:1; color:var(--text-soft);">${r.list.map(c=>nameLink(c, c.name)).join(', ')}</span>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
 function renderTab(){
   document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   if(currentTab==='five') renderFive();
@@ -631,6 +682,7 @@ function renderTab(){
   else if(currentTab==='returns') renderReturns();
   else if(currentTab==='stats') renderStats();
   else if(currentTab==='important'){ renderImportant(); loadImportant().then(renderImportantList); }
+  else if(currentTab==='referral') renderReferral();
 }
 
 document.querySelectorAll('.tabbtn').forEach(btn=>{

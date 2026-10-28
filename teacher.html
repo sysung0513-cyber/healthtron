@@ -146,6 +146,7 @@
   <button class="tabbtn" data-tab="customers"><span class="ic">👥</span>고객관리</button>
   <button class="tabbtn" data-tab="qr"><span class="ic">▦</span>QR발급</button>
   <button class="tabbtn" data-tab="stats"><span class="ic">📊</span>통계</button>
+  <button class="tabbtn" data-tab="award"><span class="ic">🏆</span>시상</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -562,6 +563,7 @@ function render(){
   else if(currentTab==='customers') renderCustomerList();
   else if(currentTab==='qr') renderQrPicker();
   else if(currentTab==='stats') renderStats();
+  else if(currentTab==='award') renderAward();
 }
 
 /* ---------------- 홈 대시보드 ---------------- */
@@ -1034,6 +1036,61 @@ function statRangeLabel(){
   if(statMode==='week'){ const r=weekRangeFromIsoWeek(statWeek); return `${statWeek} (${r.start} ~ ${r.end})`; }
   if(statMode==='month') return statMonth;
   return statYear;
+}
+
+/* ---------------- 🏆 시상: 오늘 출석한 고객 중 지난달에 소개를 한 분 ---------------- */
+const AWARD_KEY = 'teacher_award_done'; // { '2026-09:고객id': '시상한 날짜' } — 이 브라우저에만 저장
+function loadAwards(){ try{ return JSON.parse(localStorage.getItem(AWARD_KEY)||'{}'); }catch(e){ return {}; } }
+function markAward(custId, ym){
+  const a = loadAwards(); a[ym+':'+custId] = todayStr(); localStorage.setItem(AWARD_KEY, JSON.stringify(a));
+  renderAward();
+}
+function undoAward(custId, ym){
+  const a = loadAwards(); delete a[ym+':'+custId]; localStorage.setItem(AWARD_KEY, JSON.stringify(a));
+  renderAward();
+}
+function renderAward(){
+  const today = todayStr();
+  const lastMonth = shiftMonth(today.slice(0,7), -1);
+  const mNum = parseInt(lastMonth.slice(5,7),10);
+  const awards = loadAwards();
+
+  // 지난달에 등록한 고객 중 소개자가 있는 고객을 소개자 이름별로 모음
+  const introducedBy = {};
+  customers.forEach(c=>{
+    const ref = (c.referrer||'').trim();
+    if(ref && c.firstVisit && c.firstVisit.startsWith(lastMonth)) (introducedBy[ref] = introducedBy[ref] || []).push(c);
+  });
+  const introducerNames = Object.keys(introducedBy);
+
+  // 오늘 출석한 고객 중 그 소개자인 분
+  const rows = customers.filter(c=> (c.visits||[]).some(v=>v.date===today) && introducedBy[c.name.trim()])
+    .map(c=>({c, list: introducedBy[c.name.trim()], done: awards[lastMonth+':'+c.id]}))
+    .sort((a,b)=> (a.done?1:0)-(b.done?1:0) || b.list.length-a.list.length);
+  const doneCount = rows.filter(r=>r.done).length;
+
+  document.getElementById('main').innerHTML = `
+    <h2 class="section-title">🏆 ${mNum}월 소개 시상</h2>
+    <div class="card" style="margin-bottom:14px; font-size:13px;">
+      ${mNum}월 소개자 ${introducerNames.length}명 중 <b>오늘 출석 ${rows.length}명</b> · 시상 완료 ${doneCount}명
+      <div class="sub" style="margin-top:4px;">출석한 날 이 탭에 나타납니다. 시상 후 "시상완료"를 눌러주세요. (이 기기에만 저장)</div>
+    </div>
+    ${rows.length ? rows.map(r=>`
+      <div class="card" style="margin-bottom:10px; ${r.done?'opacity:.55;':'border:2px solid #F5C6CB;'}">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+          <div>
+            <span class="name" onclick="openCustomerDetail('${r.c.id}')" style="cursor:pointer; text-decoration:underline; font-size:16px; ${r.done?'text-decoration:line-through;':''}">${r.c.name}</span>
+            <span class="sub" style="color:#C0392B; font-weight:700;"> ${r.list.length}명 소개</span>
+            <div class="sub" style="margin-top:3px;">소개받고 온 고객: ${r.list.map(x=>x.name).join(', ')}</div>
+            ${r.done?`<div class="sub" style="color:var(--green,#2F8F7A);">✓ 시상 완료 (${r.done.slice(5,7)*1}/${r.done.slice(8,10)*1})</div>`:''}
+          </div>
+          ${r.done
+            ? `<button class="btn-mini" style="background:#999;" onclick="undoAward('${r.c.id}','${lastMonth}')">되돌리기</button>`
+            : `<button class="btn-mini" onclick="markAward('${r.c.id}','${lastMonth}')">시상완료</button>`}
+        </div>
+      </div>
+    `).join('') : `<div class="empty">오늘 출석한 ${mNum}월 소개자가 아직 없어요</div>`}
+  `;
 }
 
 function renderStats(){
