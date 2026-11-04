@@ -1042,7 +1042,10 @@ function statRangeLabel(){
 const AWARD_KEY = 'teacher_award_done'; // { '2026-09:고객id': '시상한 날짜' } — 이 브라우저에만 저장
 function loadAwards(){ try{ return JSON.parse(localStorage.getItem(AWARD_KEY)||'{}'); }catch(e){ return {}; } }
 function markAward(custId, ym){
+  const c = customers.find(x=>x.id===custId);
+  if(!confirm(`${c?c.name:''}님께 시상하셨나요?\n"확인"을 누르면 시상 완료로 처리됩니다.`)) return; // 실수로 누르는 것 방지
   const a = loadAwards(); a[ym+':'+custId] = todayStr(); localStorage.setItem(AWARD_KEY, JSON.stringify(a));
+  showToast(`${c?c.name:''}님 시상 완료 — 잘못 누르셨으면 아래 '시상 완료 내역'에서 되돌릴 수 있어요`);
   renderAward();
 }
 function undoAward(custId, ym){
@@ -1063,33 +1066,50 @@ function renderAward(){
   });
   const introducerNames = Object.keys(introducedBy);
 
-  // 오늘 출석한 고객 중 그 소개자인 분
-  const rows = customers.filter(c=> (c.visits||[]).some(v=>v.date===today) && introducedBy[c.name.trim()])
-    .map(c=>({c, list: introducedBy[c.name.trim()], done: awards[lastMonth+':'+c.id]}))
-    .sort((a,b)=> (a.done?1:0)-(b.done?1:0) || b.list.length-a.list.length);
-  const doneCount = rows.filter(r=>r.done).length;
+  // 오늘 출석한 소개자 중 아직 시상 안 한 분
+  const attendedToday = customers.filter(c=> (c.visits||[]).some(v=>v.date===today) && introducedBy[c.name.trim()]);
+  const pending = attendedToday.filter(c=>!awards[lastMonth+':'+c.id])
+    .map(c=>({c, list: introducedBy[c.name.trim()]}))
+    .sort((a,b)=> b.list.length-a.list.length);
+
+  // 시상 완료 내역 (출석 여부와 상관없이 항상 보임 → 언제든 되돌릴 수 있음)
+  const doneList = Object.keys(awards).filter(k=>k.startsWith(lastMonth+':')).map(k=>{
+    const id = k.slice(lastMonth.length+1);
+    const c = customers.find(x=>x.id===id);
+    return c ? {c, date: awards[k], list: introducedBy[c.name.trim()]||[]} : null;
+  }).filter(Boolean).sort((a,b)=> b.date.localeCompare(a.date));
 
   document.getElementById('main').innerHTML = `
     <h2 class="section-title">🏆 ${mNum}월 소개 시상</h2>
     <div class="card" style="margin-bottom:14px; font-size:13px;">
-      ${mNum}월 소개자 ${introducerNames.length}명 중 <b>오늘 출석 ${rows.length}명</b> · 시상 완료 ${doneCount}명
-      <div class="sub" style="margin-top:4px;">출석한 날 이 탭에 나타납니다. 시상 후 "시상완료"를 눌러주세요. (이 기기에만 저장)</div>
+      ${mNum}월 소개자 ${introducerNames.length}명 중 <b>오늘 출석 ${attendedToday.length}명</b> (시상 대기 ${pending.length}명) · 시상 완료 ${doneList.length}명
+      <div class="sub" style="margin-top:4px;">출석한 날 시상 대기 목록에 나타납니다. 시상 후 "시상완료"를 눌러주세요. (이 기기에만 저장)</div>
     </div>
-    ${rows.length ? rows.map(r=>`
-      <div class="card" style="margin-bottom:10px; ${r.done?'opacity:.55;':'border:2px solid #F5C6CB;'}">
+    ${pending.length ? pending.map(r=>`
+      <div class="card" style="margin-bottom:10px; border:2px solid #F5C6CB;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
           <div>
-            <span class="name" onclick="openCustomerDetail('${r.c.id}')" style="cursor:pointer; text-decoration:underline; font-size:16px; ${r.done?'text-decoration:line-through;':''}">${r.c.name}</span>
+            <span class="name" onclick="openCustomerDetail('${r.c.id}')" style="cursor:pointer; text-decoration:underline; font-size:16px;">${r.c.name}</span>
             <span class="sub" style="color:#C0392B; font-weight:700;"> ${r.list.length}명 소개</span>
             <div class="sub" style="margin-top:3px;">소개받고 온 고객: ${r.list.map(x=>x.name).join(', ')}</div>
-            ${r.done?`<div class="sub" style="color:var(--green,#2F8F7A);">✓ 시상 완료 (${r.done.slice(5,7)*1}/${r.done.slice(8,10)*1})</div>`:''}
           </div>
-          ${r.done
-            ? `<button class="btn-mini" style="background:#999;" onclick="undoAward('${r.c.id}','${lastMonth}')">되돌리기</button>`
-            : `<button class="btn-mini" onclick="markAward('${r.c.id}','${lastMonth}')">시상완료</button>`}
+          <button class="btn-mini" onclick="markAward('${r.c.id}','${lastMonth}')">시상완료</button>
         </div>
       </div>
-    `).join('') : `<div class="empty">오늘 출석한 ${mNum}월 소개자가 아직 없어요</div>`}
+    `).join('') : `<div class="empty">시상 대기 중인 ${mNum}월 소개자가 없어요</div>`}
+
+    <h3 style="margin:18px 0 8px; font-size:14px;">✅ 시상 완료 내역 (${doneList.length}명)</h3>
+    ${doneList.length ? doneList.map(r=>`
+      <div class="card" style="margin-bottom:8px; opacity:.85;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+          <div>
+            <span class="name" onclick="openCustomerDetail('${r.c.id}')" style="cursor:pointer; text-decoration:underline;">${r.c.name}</span>
+            <span class="sub"> ${r.list.length}명 소개 · ${r.date.slice(5,7)*1}/${r.date.slice(8,10)*1} 시상</span>
+          </div>
+          <button class="btn-mini" style="background:#999;" onclick="undoAward('${r.c.id}','${lastMonth}')">되돌리기</button>
+        </div>
+      </div>
+    `).join('') : '<div class="empty">아직 시상 완료 처리한 분이 없어요</div>'}
   `;
 }
 
